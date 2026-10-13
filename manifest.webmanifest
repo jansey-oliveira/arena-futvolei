@@ -1,0 +1,14 @@
+{
+  "name": "Arena Futvôlei",
+  "short_name": "Futvôlei",
+  "description": "Torneios de futvôlei com placar ao vivo, chaves e mata-mata.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f2230",
+  "theme_color": "#0f2230",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "img/icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
