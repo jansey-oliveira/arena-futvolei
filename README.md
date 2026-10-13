@@ -4,6 +4,7 @@ Sistema online para organizar torneios de futvôlei, do sorteio ao pódio.
 
 - **Categorias** com formato próprio: grupos + mata-mata, todos contra todos ou mata-mata direto. Cada uma define pontuação (até 18, vantagem de 2, teto), vagas, valor e quadras.
 - **Duplas**: cadastro uma a uma ou colando a lista do WhatsApp, com cabeças de chave.
+- **Duplas sorteadas**: em cada categoria você pode cadastrar os atletas individualmente e deixar o sistema sortear as duplas, com a opção de 2 potes (cada dupla tem um atleta de cada pote, por exemplo experiente + iniciante ou homem + mulher no misto). Nessas categorias a inscrição online é individual.
 - **Sorteio de chaves** equilibrado e jogos gerados na hora, com todas as categorias na mesma fila.
 - **Mesário pelo celular**: link secreto, sem cadastro. Escolhe a quadra, chama o próximo jogo e marca os pontos com + e −.
 - **Classificação automática**: vitórias, saldo, pontos feitos, confronto direto e melhores terceiros.
@@ -86,6 +87,7 @@ Esses valores não são senhas. Quem protege os dados são as regras do passo 4.
 2. Clique em **Gerar torneio de exemplo** para conhecer, ou em **Criar torneio** para começar o seu.
 3. Na aba **Categorias**, crie Iniciante, Misto, Feminino… com a pontuação e o formato de cada uma.
 4. Na aba **Duplas**, cadastre ou cole a lista e clique em **Sortear chaves**.
+   - Para sortear as duplas: em **Categorias**, edite a categoria e escolha **Duplas sorteadas entre os atletas** (marque **2 potes** se quiser). Na aba **Duplas**, cadastre ou cole os atletas, clique em **Sortear duplas** e depois em **Sortear chaves**.
 5. No **Painel**, copie os links e envie pelo WhatsApp:
    - **Público**: jogadores e torcida acompanham ao vivo.
    - **Inscrição**: atletas se inscrevem e veem a chave Pix.

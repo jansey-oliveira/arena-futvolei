@@ -186,3 +186,5 @@ tr.q td:first-child{box-shadow:inset 3px 0 0 var(--ok)}
 .share code{display:block;font-size:.8rem;color:var(--muted);overflow-wrap:anywhere}
 .setup{max-width:640px;margin:0 auto}
 .setup ol{padding-left:20px;display:flex;flex-direction:column;gap:6px}
+
+td select{width:auto;max-width:140px;padding:5px 8px}

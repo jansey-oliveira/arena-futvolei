@@ -76,4 +76,21 @@ assert.deepEqual(f.map(j => j.id), ['z']);
 // Lista do WhatsApp
 assert.deepEqual(L.lerLista('1) Rafa / Tiago\nBruno e Caio\nAna & Bia\nsozinho'), [['Rafa', 'Tiago'], ['Bruno', 'Caio'], ['Ana', 'Bia']]);
 
+// Sorteio de duplas sem potes: 9 atletas → 4 duplas e 1 sobra, ninguém repetido
+const at = [...Array(9)].map((_, i) => ({ id: 'a' + i, nome: 'Atleta ' + i }));
+const s1 = L.sortearDuplas(at);
+assert.equal(s1.pares.length, 4); assert.equal(s1.sobra.length, 1);
+assert.equal(new Set([...s1.pares.flat(), ...s1.sobra].map(a => a.id)).size, 9);
+
+// Com potes: toda dupla tem um de cada pote
+const ap = [...Array(6)].map((_, i) => ({ id: 'p' + i, pote: i < 4 ? 1 : 2 }));
+const s2 = L.sortearDuplas(ap, true);
+assert.equal(s2.pares.length, 2); assert.equal(s2.sobra.length, 2);
+s2.pares.forEach(([x, y]) => { assert.equal(x.pote || 1, 1); assert.equal(y.pote, 2); });
+assert.ok(s2.sobra.every(a => a.pote === 1), 'sobram os do pote maior');
+
+// Lista de atletas com pote opcional
+assert.deepEqual(L.lerAtletas('1) Rafa\nTiago - 2\nAna (2)\nBia pote 1\nCarla'),
+  [{ nome: 'Rafa', pote: null }, { nome: 'Tiago', pote: 2 }, { nome: 'Ana', pote: 2 }, { nome: 'Bia', pote: 1 }, { nome: 'Carla', pote: null }]);
+
 console.log('Todos os testes passaram.');

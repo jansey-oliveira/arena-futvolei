@@ -119,6 +119,31 @@ export function fila(jogos, permite = () => true, quadra = null) {
     .sort((x, y) => x.ordem - y.ordem);
 }
 
+/**
+ * Sorteia duplas entre atletas avulsos.
+ * Sem potes: embaralha todos e junta de dois em dois.
+ * Com potes: cada dupla tem um atleta do pote 1 e um do pote 2
+ * (ex.: experiente + iniciante, ou homem + mulher no misto).
+ * Retorna { pares: [[atletaA, atletaB], ...], sobra: [atletas sem par] }.
+ */
+export function sortearDuplas(atletas, usarPotes = false, rnd = Math.random) {
+  if (!usarPotes) {
+    const a = shuffle(atletas, rnd), pares = [];
+    for (let i = 0; i + 1 < a.length; i += 2) pares.push([a[i], a[i + 1]]);
+    return { pares, sobra: a.length % 2 ? [a[a.length - 1]] : [] };
+  }
+  const p1 = shuffle(atletas.filter(x => (x.pote || 1) === 1), rnd);
+  const p2 = shuffle(atletas.filter(x => x.pote === 2), rnd);
+  const n = Math.min(p1.length, p2.length);
+  return { pares: [...Array(n)].map((_, i) => [p1[i], p2[i]]), sobra: [...p1.slice(n), ...p2.slice(n)] };
+}
+
+/** Lê uma lista de atletas, um por linha ("1) Rafa", "Tiago - 2" vai para o pote 2). */
+export function lerAtletas(texto) {
+  return String(texto).split('\n').map(l => l.replace(/^\s*\d+[\).\-\s]+/, '').trim()).filter(Boolean)
+    .map(l => { const m = l.match(/^(.*?)[\s\-–(]+(?:pote\s*)?([12])\)?$/i); return m && m[1].trim() ? { nome: m[1].trim(), pote: +m[2] } : { nome: l, pote: null }; });
+}
+
 /** Lê uma lista colada do WhatsApp: "Rafa / Tiago", "Bruno e Caio", "1) Ana & Bia". */
 export function lerLista(texto) {
   return String(texto).split('\n').map(l => l.replace(/^\s*\d+[\).\-\s]*/, '').trim()).filter(Boolean)

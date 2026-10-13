@@ -72,6 +72,9 @@ const cats = () => T()?.categorias || [];
 const catById = id => cats().find(c => c.id === id);
 const duplas = () => T()?.duplas || [];
 const dupla = id => duplas().find(d => d.id === id);
+const atletas = () => T()?.atletas || [];
+const sorteadas = c => c?.modoDuplas === 'sorteadas';
+const nomeInsc = i => i.j2 ? `${i.j1} / ${i.j2}` : i.j1;
 const dn = id => { const d = dupla(id); return d ? `${d.j1} / ${d.j2}` : (id ? '—' : 'A definir'); };
 const jogosCat = cid => S.jogos.filter(j => j.cat === cid && j.status !== 'bye');
 const tabela = (cid, ch) => L.tabela(duplas(), S.jogos, cid, ch);
@@ -146,7 +149,7 @@ async function chamar(quadra) {
   } catch (e) { if (e.code === 'ocupado') toast('Este jogo acabou de ser chamado em outra quadra. Toque de novo.'); else erro(e); }
 }
 
-const novaCat = () => ({ id: uid(), nome: 'Nova categoria', formato: 'grupos', chaves: 2, classificam: 2, extras: 0, pontos: 18, vantagem: true, teto: 0, terceiro: true, vagas: 16, valor: 80, cobranca: 'dupla', quadras: [] });
+const novaCat = () => ({ id: uid(), nome: 'Nova categoria', formato: 'grupos', chaves: 2, classificam: 2, extras: 0, pontos: 18, vantagem: true, teto: 0, terceiro: true, vagas: 16, valor: 80, cobranca: 'dupla', quadras: [], modoDuplas: 'fixas', potes: false });
 function trocarTorneio(id) {
   S.tid = id; lsSet('tid', id); S.cat = null; S.editJogo = S.editCat = null; S.mesario = false;
   const u = new URL(location.href); if (id) u.searchParams.set('t', id); else u.searchParams.delete('t'); u.searchParams.delete('m');
@@ -155,7 +158,7 @@ function trocarTorneio(id) {
 }
 async function criarTorneio(d) {
   const id = uid();
-  const t = { nome: d.nome || 'Novo torneio', data: d.data || '', local: d.local || '', quadras: (d.quadras || 'Quadra 1, Quadra 2').split(',').map(s => s.trim()).filter(Boolean), duracao: 20, pix: '', pixNome: '', contato: '', patrocinadores: '', inscricoes: true, categorias: [], duplas: [], criado: Date.now() };
+  const t = { nome: d.nome || 'Novo torneio', data: d.data || '', local: d.local || '', quadras: (d.quadras || 'Quadra 1, Quadra 2').split(',').map(s => s.trim()).filter(Boolean), duracao: 20, pix: '', pixNome: '', contato: '', patrocinadores: '', inscricoes: true, categorias: [], duplas: [], atletas: [], criado: Date.now() };
   S.torneios = [{ id, d: t }, ...S.torneios];
   await lote([['torneios/' + id, t], [`torneios/${id}/privado/config`, { mesarioToken: token() }]]);
   trocarTorneio(id); S.tab = 'categorias'; render();
@@ -166,10 +169,12 @@ async function criarExemplo() {
   const id = uid();
   const ini = { ...novaCat(), nome: 'Iniciante', chaves: 3, classificam: 2, extras: 2, vagas: 12, valor: 80 };
   const mis = { ...novaCat(), nome: 'Misto', vagas: 8, valor: 45, cobranca: 'atleta' };
+  const sor = { ...novaCat(), nome: 'Duplas sorteadas', vagas: 8, valor: 40, cobranca: 'atleta', modoDuplas: 'sorteadas', potes: true };
+  const ats = ['Caio', 'Murilo', 'Renato', 'Fabrício', 'Wesley', 'Alan', 'Pietro', 'Cauã', 'Bento', 'Ravi', 'Theo', 'Yuri'].map((nome, i) => ({ id: uid(), cat: sor.id, nome, pote: i < 6 ? 1 : 2 }));
   const mk = (l, cat, n) => l.map((s, i) => { const [a, b] = s.split(' / '); return { id: uid(), cat, j1: a, j2: b, cabeca: i < n, chave: null }; });
   const ds = [...mk(['Rafa / Tiago', 'Bruno / Caio', 'Lucas / Pedro', 'Igor / Vitor', 'André / Felipe', 'Marcos / Diego', 'Heitor / Davi', 'Gui / Leo', 'João / Enzo', 'Thiago / Nico', 'Samuel / Otávio', 'Breno / Kauã'], ini.id, 3),
     ...mk(['Ana / Paulo', 'Bia / Renan', 'Carla / Edu', 'Duda / Fábio', 'Elis / Gabriel', 'Júlia / Hugo', 'Lara / Ivan', 'Nina / Jorge'], mis.id, 2)];
-  const t = { nome: 'Etapa Verão (exemplo)', data: new Date().toISOString().slice(0, 10), local: 'Arena de exemplo', quadras: ['Quadra 1', 'Quadra 2', 'Quadra 3'], duracao: 20, pix: 'financeiro@exemplo.com.br', pixNome: 'Arena de exemplo', contato: '(11) 90000-0000', patrocinadores: 'Master: Água de Coco Sol\nOuro: Loja da Areia\nApoio: Academia Ponto Forte', inscricoes: true, categorias: [ini, mis], duplas: ds, criado: Date.now(), exemplo: true };
+  const t = { nome: 'Etapa Verão (exemplo)', data: new Date().toISOString().slice(0, 10), local: 'Arena de exemplo', quadras: ['Quadra 1', 'Quadra 2', 'Quadra 3'], duracao: 20, pix: 'financeiro@exemplo.com.br', pixNome: 'Arena de exemplo', contato: '(11) 90000-0000', patrocinadores: 'Master: Água de Coco Sol\nOuro: Loja da Areia\nApoio: Academia Ponto Forte', inscricoes: true, categorias: [ini, mis, sor], duplas: ds, atletas: ats, criado: Date.now(), exemplo: true };
   S.torneios = [{ id, d: t }, ...S.torneios];
   await lote([['torneios/' + id, t], [`torneios/${id}/privado/config`, { mesarioToken: token() }]]);
   trocarTorneio(id);
@@ -190,12 +195,19 @@ async function apagarTorneio() {
 }
 
 /* ---------- inscrições ---------- */
-const vagasCat = c => Math.max(0, (+c.vagas || 0) - duplas().filter(d => d.cat === c.id).length - S.insc.filter(i => i.cat === c.id && i.status === 'pendente').length);
+const vagasCat = c => {
+  const pend = S.insc.filter(i => i.cat === c.id && i.status === 'pendente');
+  if (sorteadas(c)) return Math.max(0, (+c.vagas || 0) * 2 - atletas().filter(a => a.cat === c.id).length - pend.reduce((n, i) => n + (i.j2 ? 2 : 1), 0));
+  return Math.max(0, (+c.vagas || 0) - duplas().filter(d => d.cat === c.id).length - pend.length);
+};
 async function decidirInsc(id, status) {
   const it = S.insc.find(i => i.id === id); if (!it) return;
-  if (status === 'aprovada') await saveT({ duplas: [...duplas(), { id: uid(), cat: it.cat, j1: it.j1, j2: it.j2, cabeca: false, chave: null }] });
+  if (status === 'aprovada') {
+    if (sorteadas(catById(it.cat))) await saveT({ atletas: [...atletas(), ...[it.j1, it.j2].filter(Boolean).map(nome => ({ id: uid(), cat: it.cat, nome, pote: 1 }))] });
+    else await saveT({ duplas: [...duplas(), { id: uid(), cat: it.cat, j1: it.j1, j2: it.j2, cabeca: false, chave: null }] });
+  }
   await updD(`torneios/${S.tid}/inscricoes/${id}`, { status });
-  toast(status === 'aprovada' ? 'Inscrição aprovada. A dupla entrou na lista.' : 'Inscrição recusada. A vaga voltou a abrir.');
+  toast(status === 'aprovada' ? (sorteadas(catById(it.cat)) ? 'Inscrição aprovada. O atleta entrou na lista do sorteio.' : 'Inscrição aprovada. A dupla entrou na lista.') : 'Inscrição recusada. A vaga voltou a abrir.');
 }
 
 /* ---------- assinaturas em tempo real ---------- */
@@ -369,7 +381,7 @@ function categorias() {
   const t = T();
   const formatoTxt = c => ({ grupos: `Grupos (${c.chaves} chaves, ${c.classificam} por chave${+c.extras ? ` + ${c.extras} melhores ${+c.classificam + 1}º` : ''}) + mata-mata`, todos: 'Todos contra todos', mata: 'Mata-mata direto' })[c.formato];
   return `<div class="stack"><div class="sect-head"><div><h2>Categorias</h2><p class="muted small" style="margin:0">Cada categoria tem formato, pontuação, vagas e quadras próprias.</p></div><button class="btn" data-act="addCat">Adicionar categoria</button></div>
-  ${cats().map(c => S.editCat === c.id ? catForm(c, t) : `<div class="panel row between"><div style="min-width:0"><h3>${esc(c.nome)}</h3><div class="small muted">${formatoTxt(c)} · ${regraTxt(c)} · ${c.vagas} vagas · ${brl(c.valor)}/${c.cobranca}${c.quadras?.length ? ' · ' + esc(c.quadras.join(', ')) : ''}</div></div>
+  ${cats().map(c => S.editCat === c.id ? catForm(c, t) : `<div class="panel row between"><div style="min-width:0"><h3>${esc(c.nome)}</h3><div class="small muted">${formatoTxt(c)}${sorteadas(c) ? ` · duplas sorteadas${c.potes ? ' com 2 potes' : ''}` : ''} · ${regraTxt(c)} · ${c.vagas} vagas · ${brl(c.valor)}/${c.cobranca}${c.quadras?.length ? ' · ' + esc(c.quadras.join(', ')) : ''}</div></div>
     <div class="row"><button class="btn ghost sm" data-act="editCat" data-id="${c.id}">Editar</button><button class="btn danger sm" data-act="delCat" data-id="${c.id}">Remover</button></div></div>`).join('') || '<div class="panel muted">Nenhuma categoria. Adicione Iniciante, Misto, Feminino…</div>'}
   </div>`;
 }
@@ -384,6 +396,8 @@ function catForm(c, t) {
    <label class="field"><span>Cobrança</span><select id="cf-cob" name="cobranca"><option value="dupla"${c.cobranca === 'dupla' ? ' selected' : ''}>por dupla</option><option value="atleta"${c.cobranca === 'atleta' ? ' selected' : ''}>por atleta</option></select></label>
    <label class="check"><input id="cf-v" name="vantagem" type="checkbox"${c.vantagem ? ' checked' : ''}> Vantagem de 2 pontos</label>
    <label class="check"><input id="cf-3" name="terceiro" type="checkbox"${c.terceiro ? ' checked' : ''}> Disputa de 3º lugar</label>
+   <label class="field"><span>Como as duplas são formadas</span><select id="cf-modo" name="modoDuplas"><option value="fixas"${!sorteadas(c) ? ' selected' : ''}>Duplas fixas (se inscrevem juntas)</option><option value="sorteadas"${sorteadas(c) ? ' selected' : ''}>Duplas sorteadas entre os atletas</option></select></label>
+   <label class="check"><input id="cf-potes" name="potes" type="checkbox"${c.potes ? ' checked' : ''}> Sortear com 2 potes (cada dupla tem um atleta de cada pote)</label>
    <fieldset class="full" style="border:1px solid var(--line);border-radius:8px"><legend class="small muted">Quadras desta categoria (nenhuma marcada = todas)</legend><div class="row">${(t.quadras || []).map((q, i) => `<label class="check"><input id="cf-q${i}" type="checkbox" name="q" value="${esc(q)}"${c.quadras?.includes(q) ? ' checked' : ''}> ${esc(q)}</label>`).join('')}</div></fieldset>
    <div class="row full"><button class="btn">Salvar categoria</button><button type="button" class="btn ghost" data-act="editCat" data-id="">Cancelar</button></div></form>`;
 }
@@ -397,9 +411,9 @@ const semCat = () => `<div class="panel muted">${S.org ? 'Crie uma categoria na 
 function duplasV() {
   const pk = catPicker(); if (!S.cat) return semCat(); const c = catById(S.cat);
   const ds = duplas().filter(d => d.cat === c.id); const temJogos = S.jogos.some(j => j.cat === c.id);
-  return `<div class="stack"><div class="sect-head"><div><h2>Duplas · ${esc(c.nome)}</h2><p class="muted small num" style="margin:0">${ds.length} de ${c.vagas} vagas</p></div><div class="row">${pk}
-   <button class="btn" data-act="sortear" data-id="${c.id}">${temJogos ? 'Refazer sorteio' : c.formato === 'mata' ? 'Gerar chave' : c.formato === 'todos' ? 'Gerar tabela' : 'Sortear chaves'}</button></div></div>
-  <div class="grid2">
+  return `<div class="stack"><div class="sect-head"><div><h2>Duplas · ${esc(c.nome)}</h2><p class="muted small num" style="margin:0">${ds.length} de ${c.vagas} vagas${sorteadas(c) ? ' · duplas sorteadas' : ''}</p></div><div class="row">${pk}
+   <button class="btn" data-act="sortear" data-id="${c.id}"${ds.length < 2 ? ' disabled' : ''}>${temJogos ? 'Refazer sorteio das chaves' : c.formato === 'mata' ? 'Gerar chave' : c.formato === 'todos' ? 'Gerar tabela' : 'Sortear chaves'}</button></div></div>
+  ${sorteadas(c) ? atletasHTML(c) : `<div class="grid2">
    <form class="panel form" data-form="addDupla"><h3 class="full">Adicionar dupla</h3>
      <label class="field"><span>Atleta 1</span><input id="ad-1" name="j1" type="text" required></label>
      <label class="field"><span>Atleta 2</span><input id="ad-2" name="j2" type="text" required></label>
@@ -408,10 +422,42 @@ function duplasV() {
    <form class="panel form" data-form="colar"><h3 class="full">Colar lista do WhatsApp</h3>
      <label class="field full"><span>Uma dupla por linha, separando os atletas com / ou e</span><textarea id="cl-t" name="lista" placeholder="Rafa / Tiago&#10;Bruno e Caio"></textarea></label>
      <div class="full"><button class="btn ghost">Importar duplas</button></div></form>
-  </div>
-  <section class="panel"><div class="tw"><table><thead><tr><th>#</th><th>Dupla</th><th>Chave</th><th>Cabeça</th><th></th></tr></thead><tbody>
-   ${ds.map((d, i) => `<tr><td class="pos">${i + 1}</td><td>${esc(d.j1)} / ${esc(d.j2)}</td><td>${esc(d.chave || '—')}</td><td><input id="cb-${d.id}" type="checkbox" data-change="cabeca" data-id="${d.id}"${d.cabeca ? ' checked' : ''} aria-label="Cabeça de chave"></td><td class="n"><button class="link small" data-act="delDupla" data-id="${d.id}">Remover</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Nenhuma dupla nesta categoria.</td></tr>'}
+  </div>`}
+  <section class="panel">${sorteadas(c) ? '<h3>Duplas formadas</h3>' : ''}<div class="tw"><table><thead><tr><th>#</th><th>Dupla</th><th>Chave</th><th>Cabeça</th><th></th></tr></thead><tbody>
+   ${ds.map((d, i) => `<tr><td class="pos">${i + 1}</td><td>${esc(d.j1)} / ${esc(d.j2)}</td><td>${esc(d.chave || '—')}</td><td><input id="cb-${d.id}" type="checkbox" data-change="cabeca" data-id="${d.id}"${d.cabeca ? ' checked' : ''} aria-label="Cabeça de chave"></td><td class="n"><button class="link small" data-act="delDupla" data-id="${d.id}">Remover</button></td></tr>`).join('') || `<tr><td colspan="5" class="muted">${sorteadas(c) ? 'Cadastre os atletas e clique em Sortear duplas.' : 'Nenhuma dupla nesta categoria.'}</td></tr>`}
   </tbody></table></div></section>${temJogos ? '<p class="small muted">Alterar duplas depois do sorteio não muda os jogos já gerados. Refaça o sorteio para incluir as mudanças.</p>' : ''}</div>`;
+}
+
+function atletasHTML(c) {
+  const as = atletas().filter(a => a.cat === c.id);
+  const n1 = as.filter(a => (a.pote || 1) === 1).length, n2 = as.filter(a => a.pote === 2).length;
+  const temDuplas = duplas().some(d => d.cat === c.id);
+  const previa = c.potes ? Math.min(n1, n2) : Math.floor(as.length / 2);
+  const sobra = c.potes ? Math.abs(n1 - n2) : as.length % 2;
+  const poteSel = (id, v) => `<select id="${id}" name="pote"${id.startsWith('pt-') ? ` data-change="pote" data-id="${id.slice(3)}" aria-label="Pote"` : ''}><option value="1"${v !== 2 ? ' selected' : ''}>Pote 1</option><option value="2"${v === 2 ? ' selected' : ''}>Pote 2</option></select>`;
+  return `<section class="panel stack" style="gap:14px">
+    <div class="sect-head"><div><h3>Atletas para o sorteio</h3><p class="small muted num" style="margin:0">${as.length} atletas${c.potes ? ` · pote 1: ${n1} · pote 2: ${n2}` : ''} · formam ${previa} duplas${sobra ? ` · ${sobra} ${sobra === 1 ? 'fica' : 'ficam'} sem par` : ''}</p></div>
+    <button class="btn sea" data-act="sortearDuplas" data-id="${c.id}"${previa < 1 ? ' disabled' : ''}>${temDuplas ? 'Sortear duplas de novo' : 'Sortear duplas'}</button></div>
+    ${c.potes ? '<p class="small muted" style="margin:0">Cada dupla terá um atleta do pote 1 e um do pote 2. Use, por exemplo, experientes no pote 1 e iniciantes no pote 2, ou homens e mulheres no misto.</p>' : ''}
+    <div class="grid2">
+     <form class="form" data-form="addAtleta"><label class="field ${c.potes ? '' : 'full'}"><span>Nome do atleta</span><input id="aa-n" name="nome" type="text" maxlength="60" required></label>
+       ${c.potes ? `<label class="field"><span>Pote</span>${poteSel('aa-p', 1)}</label>` : ''}<div class="full"><button class="btn">Adicionar atleta</button></div></form>
+     <form class="form" data-form="colarAtletas"><label class="field full"><span>Colar lista (um atleta por linha${c.potes ? '; termine com "- 2" para o pote 2' : ''})</span><textarea id="ca-t" name="lista" placeholder="${c.potes ? 'Rafa&#10;Tiago - 2' : 'Rafa&#10;Tiago'}"></textarea></label><div class="full"><button class="btn ghost">Importar atletas</button></div></form>
+    </div>
+    ${as.length ? `<div class="tw"><table><thead><tr><th>#</th><th>Atleta</th>${c.potes ? '<th>Pote</th>' : ''}<th>Na dupla</th><th></th></tr></thead><tbody>
+      ${as.map((a, i) => { const d = duplas().find(x => x.cat === c.id && (x.a1 === a.id || x.a2 === a.id)); return `<tr><td class="pos">${i + 1}</td><td>${esc(a.nome)}</td>${c.potes ? `<td>${poteSel('pt-' + a.id, a.pote)}</td>` : ''}<td class="small muted">${d ? esc(d.a1 === a.id ? d.j2 : d.j1) : '—'}</td><td class="n"><button class="link small" data-act="delAtleta" data-id="${a.id}">Remover</button></td></tr>`; }).join('')}
+    </tbody></table></div>` : '<p class="muted" style="margin:0">Nenhum atleta cadastrado nesta categoria.</p>'}
+  </section>`;
+}
+async function sortearDuplasCat(c) {
+  const as = atletas().filter(a => a.cat === c.id);
+  const { pares, sobra } = L.sortearDuplas(as, !!c.potes);
+  if (!pares.length) return toast(c.potes ? 'Cadastre atletas nos dois potes.' : 'Cadastre pelo menos 2 atletas.');
+  const novas = pares.map(([a, b]) => ({ id: uid(), cat: c.id, j1: a.nome, j2: b.nome, a1: a.id, a2: b.id, cabeca: false, chave: null }));
+  if (S.jogos.some(j => j.cat === c.id)) await lote(apagarJogosOps(c.id));
+  await saveT({ duplas: [...duplas().filter(d => d.cat !== c.id), ...novas] });
+  render();
+  toast(`${novas.length} duplas sorteadas.${sobra.length ? ' Sem par: ' + sobra.map(a => a.nome).join(', ') + '.' : ''} Agora sorteie as chaves.`);
 }
 
 function jogosV() {
@@ -479,27 +525,29 @@ function mesario() {
 function inscricao() {
   const t = T();
   const pixBox = t.pix ? `<div class="pix"><span class="small muted">Pix${t.pixNome ? ' · ' + esc(t.pixNome) : ''}</span><code id="pixk">${esc(t.pix)}</code><button type="button" class="btn sm" data-act="copiarPix">Copiar chave Pix</button></div>` : '<p class="small muted">O organizador ainda não informou a chave Pix.</p>';
+  const primeira = cats().find(c => vagasCat(c)) || cats()[0]; const ind = sorteadas(primeira);
   const form = !t.inscricoes ? '<div class="panel muted">As inscrições deste torneio estão fechadas.</div>' :
-    `<form class="panel form" data-form="insc"><h3 class="full">Inscrever dupla</h3>
-    <label class="field full"><span>Categoria</span><select id="in-cat" name="cat" required>${cats().map(c => { const v = vagasCat(c); return `<option value="${c.id}"${v ? '' : ' disabled'}>${esc(c.nome)} · ${brl(c.valor)}/${c.cobranca} · ${v ? v + ' vagas restantes' : 'esgotada'}</option>`; }).join('')}</select></label>
-    <label class="field"><span>Atleta 1</span><input id="in-1" name="j1" type="text" maxlength="60" required></label>
-    <label class="field"><span>Atleta 2</span><input id="in-2" name="j2" type="text" maxlength="60" required></label>
+    `<form class="panel form" data-form="insc"><h3 class="full" id="in-tit">${ind ? 'Inscrição individual' : 'Inscrever dupla'}</h3>
+    <label class="field full"><span>Categoria</span><select id="in-cat" name="cat" data-change="inscCat" required>${cats().map(c => { const v = vagasCat(c); return `<option value="${c.id}"${v ? '' : ' disabled'}>${esc(c.nome)} · ${brl(c.valor)}/${c.cobranca} · ${v ? v + (sorteadas(c) ? (v === 1 ? ' vaga de atleta' : ' vagas de atleta') : ' vagas restantes') : 'esgotada'}</option>`; }).join('')}</select></label>
+    <label class="field"><span id="in-1-l">${ind ? 'Nome do atleta' : 'Atleta 1'}</span><input id="in-1" name="j1" type="text" maxlength="60" required></label>
+    <label class="field" id="in-2-w"${ind ? ' hidden' : ''}><span>Atleta 2</span><input id="in-2" name="j2" type="text" maxlength="60"${ind ? '' : ' required'}></label>
+    <p class="full small muted" id="in-ind" style="margin:0"${ind ? '' : ' hidden'}>Nesta categoria as duplas são sorteadas entre os atletas inscritos. Inscreva só você.</p>
     <label class="field full"><span>WhatsApp para contato</span><input id="in-z" name="zap" type="tel" maxlength="30" required placeholder="(11) 90000-0000"></label>
     <div class="full">${pixBox}</div>
-    <p class="full small muted" style="margin:0">Faça o Pix e envie o comprovante ao organizador${t.contato ? ' pelo WhatsApp ' + esc(t.contato) : ''}. A dupla entra na lista depois da aprovação.</p>
+    <p class="full small muted" style="margin:0">Faça o Pix e envie o comprovante ao organizador${t.contato ? ' pelo WhatsApp ' + esc(t.contato) : ''}. A inscrição vale depois da aprovação.</p>
     <div class="full"><button class="btn">Enviar inscrição</button></div></form>`;
   const chipI = s => s === 'aprovada' ? '<span class="chip ok">aprovada</span>' : s === 'recusada' ? '<span class="chip">recusada</span>' : '<span class="chip sea">pendente</span>';
   if (S.org) {
     const pend = S.insc.filter(i => i.status === 'pendente'), dec = S.insc.filter(i => i.status !== 'pendente');
     return `<div class="stack"><div class="sect-head"><div><h2>Inscrições</h2><p class="muted small" style="margin:0">${t.inscricoes ? 'Abertas' : 'Fechadas'} · ${pend.length} pendentes · ${dec.filter(i => i.status === 'aprovada').length} aprovadas · ${dec.filter(i => i.status === 'recusada').length} recusadas</p></div><button class="btn ghost sm" data-act="copiar" data-k="inscricao">Copiar link de inscrição</button></div>
-    <section class="panel"><div class="games">${pend.map(i => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto"><div class="t"><b>${esc(i.j1)} / ${esc(i.j2)}</b><div class="small muted">${esc(catById(i.cat)?.nome || '')} · ${brl(catById(i.cat)?.valor)} · ${hora(i.em)} · WhatsApp <span style="user-select:all">${esc(i.zap)}</span></div></div>
+    <section class="panel"><div class="games">${pend.map(i => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto"><div class="t"><b>${esc(nomeInsc(i))}</b><div class="small muted">${esc(catById(i.cat)?.nome || '')} · ${brl(catById(i.cat)?.valor)} · ${hora(i.em)} · WhatsApp <span style="user-select:all">${esc(i.zap)}</span></div></div>
       <div class="row"><button class="btn sm" data-act="insc" data-id="${i.id}" data-s="aprovada">Aprovar</button><button class="btn ghost sm" data-act="insc" data-id="${i.id}" data-s="recusada">Recusar</button></div></div>`).join('') || '<p class="muted">Nenhuma inscrição pendente.</p>'}</div></section>
-    ${dec.length ? `<section class="panel"><h3>Já decididas</h3><div class="games">${dec.map(i => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto"><div class="t">${esc(i.j1)} / ${esc(i.j2)} <span class="small muted">· ${esc(catById(i.cat)?.nome || '')}</span></div>${chipI(i.status)}</div>`).join('')}</div></section>` : ''}
+    ${dec.length ? `<section class="panel"><h3>Já decididas</h3><div class="games">${dec.map(i => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto"><div class="t">${esc(nomeInsc(i))} <span class="small muted">· ${esc(catById(i.cat)?.nome || '')}</span></div>${chipI(i.status)}</div>`).join('')}</div></section>` : ''}
     <details class="panel"><summary class="small" style="cursor:pointer">Ver o formulário como os atletas veem</summary><div style="margin-top:12px">${form}</div></details></div>`;
   }
   const minhas = lsGet('minhas', []).filter(i => i.tid === S.tid);
   return `<div class="stack"><div><div class="label">${esc(dataBR(t.data))}${t.local ? ' · ' + esc(t.local) : ''}</div><h2>Inscrição · ${esc(t.nome)}</h2></div>${form}
-  ${minhas.length ? `<section class="panel"><h3>Inscrições enviadas deste aparelho</h3><div class="games">${minhas.map(i => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto"><div class="t">${esc(i.j1)} / ${esc(i.j2)} <span class="small muted">· ${esc(catById(i.cat)?.nome || '')}</span></div>${duplas().some(d => d.cat === i.cat && d.j1 === i.j1 && d.j2 === i.j2) ? chipI('aprovada') : '<span class="chip sea">aguardando</span>'}</div>`).join('')}</div></section>` : ''}</div>`;
+  ${minhas.length ? `<section class="panel"><h3>Inscrições enviadas deste aparelho</h3><div class="games">${minhas.map(i => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto"><div class="t">${esc(nomeInsc(i))} <span class="small muted">· ${esc(catById(i.cat)?.nome || '')}</span></div>${(sorteadas(catById(i.cat)) ? atletas().some(a => a.cat === i.cat && a.nome === i.j1) : duplas().some(d => d.cat === i.cat && d.j1 === i.j1 && d.j2 === i.j2)) ? chipI('aprovada') : '<span class="chip sea">aguardando</span>'}</div>`).join('')}</div></section>` : ''}</div>`;
 }
 
 /* ---------- modo TV ---------- */
@@ -553,7 +601,14 @@ const ACT = {
   apagarT: () => confirmar('Apagar este torneio, com todas as categorias, duplas, jogos e inscrições? Isso não pode ser desfeito.', 'Apagar torneio', () => apagarTorneio().catch(erro)),
   addCat: async () => { const c = novaCat(); await saveT({ categorias: [...cats(), c] }); S.editCat = c.id; render(); },
   editCat: d => { S.editCat = d.id || null; render(); },
-  delCat: d => confirmar('Remover esta categoria, suas duplas e seus jogos?', 'Remover', async () => { await lote(apagarJogosOps(d.id)); await saveT({ categorias: cats().filter(c => c.id !== d.id), duplas: duplas().filter(x => x.cat !== d.id) }); render(); }),
+  delCat: d => confirmar('Remover esta categoria, suas duplas e seus jogos?', 'Remover', async () => { await lote(apagarJogosOps(d.id)); await saveT({ categorias: cats().filter(c => c.id !== d.id), duplas: duplas().filter(x => x.cat !== d.id), atletas: atletas().filter(x => x.cat !== d.id) }); render(); }),
+  delAtleta: d => { saveT({ atletas: atletas().filter(a => a.id !== d.id) }); render(); },
+  sortearDuplas: d => {
+    const c = catById(d.id); const go = () => sortearDuplasCat(c).catch(() => { });
+    if (S.jogos.some(j => j.cat === c.id)) confirmar('Sortear as duplas de novo apaga os jogos e placares desta categoria. Continuar?', 'Sortear de novo', go);
+    else if (duplas().some(x => x.cat === c.id)) confirmar('Sortear de novo substitui as duplas atuais desta categoria. Continuar?', 'Sortear de novo', go);
+    else go();
+  },
   delDupla: d => { saveT({ duplas: duplas().filter(x => x.id !== d.id) }); render(); },
   sortear: d => { const c = catById(d.id); if (S.jogos.some(j => j.cat === c.id)) confirmar('Refazer o sorteio apaga todos os jogos e placares desta categoria. Continuar?', 'Refazer sorteio', () => sortear(c).catch(() => { })); else sortear(c).catch(() => { }); },
   gerarMata: d => {
@@ -589,6 +644,15 @@ document.addEventListener('change', e => {
   const el = e.target;
   if (el.id === 'selT') { trocarTorneio(el.value); render(); return; }
   if (el.dataset.change === 'cat') { S.cat = el.value; el.blur(); render(); }
+  if (el.dataset.change === 'pote') { saveT({ atletas: atletas().map(a => a.id === el.dataset.id ? { ...a, pote: +el.value } : a) }); el.blur(); render(); return; }
+  if (el.dataset.change === 'inscCat') {
+    const ind = sorteadas(catById(el.value)), w = $('#in-2-w'), i2 = $('#in-2');
+    if (w) { w.hidden = ind; i2.required = !ind; if (ind) i2.value = ''; }
+    if ($('#in-ind')) $('#in-ind').hidden = !ind;
+    if ($('#in-tit')) $('#in-tit').textContent = ind ? 'Inscrição individual' : 'Inscrever dupla';
+    if ($('#in-1-l')) $('#in-1-l').textContent = ind ? 'Nome do atleta' : 'Atleta 1';
+    return;
+  }
   if (el.dataset.change === 'cabeca') saveT({ duplas: duplas().map(d => d.id === el.dataset.id ? { ...d, cabeca: el.checked } : d) });
 });
 const num = (v, d, min) => Math.max(min, Number.isFinite(+v) && v !== '' ? +v : d);
@@ -597,7 +661,7 @@ const FORM = {
   config: fd => { const o = Object.fromEntries(fd); saveT({ nome: o.nome, data: o.data, local: o.local, quadras: o.quadras.split(',').map(s => s.trim()).filter(Boolean), duracao: num(o.duracao, 20, 5), contato: o.contato, pix: o.pix, pixNome: o.pixNome, patrocinadores: o.patrocinadores, inscricoes: fd.has('inscricoes') }).then(() => toast('Torneio salvo.')); },
   cat: (fd, f) => {
     const o = Object.fromEntries(fd); const id = f.dataset.id;
-    const up = { nome: o.nome, formato: o.formato, chaves: num(o.chaves, 1, 1), classificam: num(o.classificam, 1, 1), extras: num(o.extras, 0, 0), pontos: num(o.pontos, 18, 1), teto: num(o.teto, 0, 0), vagas: num(o.vagas, 2, 2), valor: num(o.valor, 0, 0), cobranca: o.cobranca, vantagem: fd.has('vantagem'), terceiro: fd.has('terceiro'), quadras: fd.getAll('q') };
+    const up = { nome: o.nome, formato: o.formato, chaves: num(o.chaves, 1, 1), classificam: num(o.classificam, 1, 1), extras: num(o.extras, 0, 0), pontos: num(o.pontos, 18, 1), teto: num(o.teto, 0, 0), vagas: num(o.vagas, 2, 2), valor: num(o.valor, 0, 0), cobranca: o.cobranca, vantagem: fd.has('vantagem'), terceiro: fd.has('terceiro'), quadras: fd.getAll('q'), modoDuplas: o.modoDuplas === 'sorteadas' ? 'sorteadas' : 'fixas', potes: fd.has('potes') };
     S.editCat = null; saveT({ categorias: cats().map(c => c.id === id ? { ...c, ...up } : c) }).then(() => toast('Categoria salva.'));
   },
   addDupla: (fd, f) => { const o = Object.fromEntries(fd); saveT({ duplas: [...duplas(), { id: uid(), cat: S.cat, j1: o.j1.trim(), j2: o.j2.trim(), cabeca: fd.has('cabeca'), chave: null }] }); f.reset(); },
@@ -605,6 +669,12 @@ const FORM = {
     const novas = L.lerLista(fd.get('lista')).map(([a, b]) => ({ id: uid(), cat: S.cat, j1: a, j2: b, cabeca: false, chave: null }));
     if (!novas.length) return toast('Nenhuma dupla reconhecida. Use o formato Atleta / Atleta.');
     saveT({ duplas: [...duplas(), ...novas] }).then(() => toast(`${novas.length} duplas importadas.`)); f.reset();
+  },
+  addAtleta: (fd, f) => { const nome = String(fd.get('nome')).trim().slice(0, 60); if (!nome) return; saveT({ atletas: [...atletas(), { id: uid(), cat: S.cat, nome, pote: +fd.get('pote') || 1 }] }); f.reset(); },
+  colarAtletas: (fd, f) => {
+    const novos = L.lerAtletas(fd.get('lista')).map(a => ({ id: uid(), cat: S.cat, nome: a.nome.slice(0, 60), pote: a.pote || 1 }));
+    if (!novos.length) return toast('Nenhum atleta reconhecido. Coloque um nome por linha.');
+    saveT({ atletas: [...atletas(), ...novos] }).then(() => toast(`${novos.length} atletas importados.`)); f.reset();
   },
   editJogo: (fd, f) => {
     const j = S.jogos.find(x => x.id === f.dataset.id); const pa = +fd.get('pa'), pb = +fd.get('pb'); const c = catById(j.cat);
@@ -614,9 +684,10 @@ const FORM = {
   },
   insc: async (fd, f) => {
     const o = Object.fromEntries(fd); const c = catById(o.cat); if (!c || !vagasCat(c)) return toast('Esta categoria está esgotada.');
+    if (sorteadas(c)) o.j2 = ''; else if (!String(o.j2 || '').trim()) return toast('Informe o nome dos dois atletas.');
     try {
       const u = await ensureAuth(); const id = uid();
-      const item = { cat: o.cat, j1: o.j1.trim().slice(0, 60), j2: o.j2.trim().slice(0, 60), zap: o.zap.trim().slice(0, 30), status: 'pendente', em: Date.now(), uid: u.uid };
+      const item = { cat: o.cat, j1: o.j1.trim().slice(0, 60), j2: String(o.j2 || '').trim().slice(0, 60), zap: o.zap.trim().slice(0, 30), status: 'pendente', em: Date.now(), uid: u.uid };
       await setDoc(R(`torneios/${S.tid}/inscricoes/${id}`), item);
       lsSet('minhas', [...lsGet('minhas', []), { id, tid: S.tid, cat: item.cat, j1: item.j1, j2: item.j2 }]);
       f.reset(); toast('Inscrição enviada. Aguarde a aprovação do organizador.'); render();
