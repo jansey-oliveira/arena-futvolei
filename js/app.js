@@ -18,10 +18,10 @@ const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } ca
 const params = new URLSearchParams(location.search);
 const S = {
   boot: 'carregando', user: null, org: false, mesario: false, torneios: [], tid: params.get('t') || lsGet('tid'),
-  jogos: [], insc: [], privado: null, tab: 'painel', cat: null, quadra: lsGet('quadra'), editJogo: null, editCat: null,
+  jogos: [], insc: [], privado: null, pats: [], foto: null, tab: 'painel', cat: null, quadra: lsGet('quadra'), editJogo: null, editCat: null,
   modal: null, tv: false, tvIdx: 0, pend: false, novoT: false
 };
-const unsubs = { jogos: null, insc: null, priv: null };
+const unsubs = { jogos: null, insc: null, priv: null, pats: null };
 
 /* ---------- Firebase ---------- */
 const configurado = !Object.values(firebaseConfig).some(v => String(v).includes('COLE_AQUI'));
@@ -77,9 +77,41 @@ const sorteadas = c => c?.modoDuplas === 'sorteadas';
 const nomeInsc = i => i.j2 ? `${i.j1} / ${i.j2}` : i.j1;
 const dn = id => { const d = dupla(id); return d ? `${d.j1} / ${d.j2}` : (id ? '—' : 'A definir'); };
 const jogosCat = cid => S.jogos.filter(j => j.cat === cid && j.status !== 'bye');
-const tabela = (cid, ch) => L.tabela(duplas(), S.jogos, cid, ch);
+const opt = k => T()?.opcoes?.[k] !== false; // funcionalidades opcionais: ligadas por padrão
+const manuais = () => opt('desempate') ? (T()?.desempate || {}) : {};
+const tabela = (cid, ch) => L.tabela(duplas(), S.jogos, cid, ch, manuais()[cid + '|' + ch] || null);
+const emSets = j => L.jogoEmSets(catById(j.cat), j);
+const regraAtual = j => { const c = catById(j.cat); return emSets(j) ? L.regraDoSet(c, (j.sets || []).length) : c; };
+const COTAS = [['master', 'Master'], ['ouro', 'Ouro'], ['prata', 'Prata'], ['apoio', 'Apoio']];
+const cotaNome = k => (COTAS.find(c => c[0] === k) || COTAS[3])[1];
+const patsOrdem = () => [...S.pats].sort((a, b) => COTAS.findIndex(c => c[0] === a.cota) - COTAS.findIndex(c => c[0] === b.cota) || (a.em || 0) - (b.em || 0));
+const linkPat = l => { l = String(l || '').trim(); if (!l) return ''; if (l.startsWith('@')) return 'https://instagram.com/' + l.slice(1); return /^https?:\/\//i.test(l) ? l : 'https://' + l; };
+function qrImg(texto, cls = 'qr') {
+  try { const q = window.qrcode(0, 'M'); q.addData(texto); q.make(); return `<img class="${cls}" src="${q.createDataURL(6, 2)}" alt="QR code para ${esc(texto)}">`; } catch { return ''; }
+}
+/** Lê uma imagem escolhida pelo usuário e devolve um data URL comprimido (para caber no banco gratuito). */
+function comprimirImagem(file, lado, limite, manterPng = false) {
+  return new Promise((ok, falha) => {
+    if (!file) return falha(new Error('sem arquivo'));
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const k = Math.min(1, lado / Math.max(img.width, img.height)), cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(img.width * k)); cv.height = Math.max(1, Math.round(img.height * k));
+      const cx = cv.getContext('2d');
+      const png = manterPng && /png|svg|webp/i.test(file.type);
+      if (!png) { cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); }
+      cx.drawImage(img, 0, 0, cv.width, cv.height);
+      if (png) { const d = cv.toDataURL('image/png'); if (d.length <= limite) return ok(d); }
+      for (let q = 0.8; q >= 0.3; q -= 0.1) { const d = cv.toDataURL(png ? 'image/webp' : 'image/jpeg', q); if (d.length <= limite) return ok(d); }
+      falha(new Error('grande demais'));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); falha(new Error('formato')); };
+    img.src = url;
+  });
+}
 const chavesCat = cid => L.chavesCat(duplas(), cid);
-const podio = c => L.podio(c, duplas(), S.jogos);
+const podio = c => L.podio(c, duplas(), S.jogos, manuais());
 const catPermite = (cid, q) => { const c = catById(cid); return !c?.quadras?.length || c.quadras.includes(q); };
 const fila = q => L.fila(S.jogos, catPermite, q);
 const regraTxt = L.regraTxt;
@@ -122,20 +154,20 @@ async function sortear(c) {
   toast(`${grupos.length > 1 ? grupos.length + ' chaves sorteadas' : 'Tabela gerada'} com ${novos.length} jogos.`);
 }
 async function gerarMata(c) {
-  const seeds = L.classificados(c, duplas(), S.jogos);
+  const seeds = L.classificados(c, duplas(), S.jogos, manuais());
   if (seeds.length < 2) return toast('São necessárias ao menos 2 duplas classificadas.');
   const ci = cats().findIndex(x => x.id === c.id);
   const velhos = S.jogos.filter(j => j.cat === c.id && j.fase === 'mata').map(j => [jp(j.id), null]);
   await lote([...velhos, ...L.montarMata(c, seeds, ci, uid).map(g => [jp(g.id), g])]);
 }
-async function finalizar(j, pa, pb) {
+async function finalizar(j, pa, pb, sets = null) {
   const venc = pa > pb ? j.a : j.b, perd = pa > pb ? j.b : j.a;
-  await updD(jp(j.id), { pa, pb, status: 'fim', vencedor: venc, fim: Date.now() });
+  await updD(jp(j.id), { pa, pb, status: 'fim', vencedor: venc, fim: Date.now(), ...(sets ? { sets } : {}) });
   if (j.prox) await updD(jp(j.prox.id), { [j.prox.slot]: venc });
   if (j.perdProx) await updD(jp(j.perdProx.id), { [j.perdProx.slot]: perd });
 }
 async function reabrir(j) {
-  await updD(jp(j.id), { status: 'agendado', pa: 0, pb: 0, vencedor: null, quadra: null });
+  await updD(jp(j.id), { status: 'agendado', pa: 0, pb: 0, vencedor: null, quadra: null, sets: [] });
   for (const lk of [j.prox, j.perdProx]) { if (!lk) continue; const nx = S.jogos.find(x => x.id === lk.id); if (nx && nx.status !== 'fim') await updD(jp(lk.id), { [lk.slot]: null }); }
 }
 async function chamar(quadra) {
@@ -149,7 +181,7 @@ async function chamar(quadra) {
   } catch (e) { if (e.code === 'ocupado') toast('Este jogo acabou de ser chamado em outra quadra. Toque de novo.'); else erro(e); }
 }
 
-const novaCat = () => ({ id: uid(), nome: 'Nova categoria', formato: 'grupos', chaves: 2, classificam: 2, extras: 0, pontos: 18, vantagem: true, teto: 0, terceiro: true, vagas: 16, valor: 80, cobranca: 'dupla', quadras: [], modoDuplas: 'fixas', potes: false });
+const novaCat = () => ({ id: uid(), nome: 'Nova categoria', formato: 'grupos', chaves: 2, classificam: 2, extras: 0, pontos: 18, vantagem: true, teto: 0, terceiro: true, vagas: 16, valor: 80, cobranca: 'dupla', quadras: [], modoDuplas: 'fixas', potes: false, finalSets: false, pontosSet: 18, pontosTie: 15 });
 function trocarTorneio(id) {
   S.tid = id; lsSet('tid', id); S.cat = null; S.editJogo = S.editCat = null; S.mesario = false;
   const u = new URL(location.href); if (id) u.searchParams.set('t', id); else u.searchParams.delete('t'); u.searchParams.delete('m');
@@ -158,7 +190,7 @@ function trocarTorneio(id) {
 }
 async function criarTorneio(d) {
   const id = uid();
-  const t = { nome: d.nome || 'Novo torneio', data: d.data || '', local: d.local || '', quadras: (d.quadras || 'Quadra 1, Quadra 2').split(',').map(s => s.trim()).filter(Boolean), duracao: 20, pix: '', pixNome: '', contato: '', patrocinadores: '', inscricoes: true, categorias: [], duplas: [], atletas: [], criado: Date.now() };
+  const t = { nome: d.nome || 'Novo torneio', data: d.data || '', local: d.local || '', quadras: (d.quadras || 'Quadra 1, Quadra 2').split(',').map(s => s.trim()).filter(Boolean), duracao: 20, pix: '', pixNome: '', contato: '', inscricoes: true, opcoes: { comprovante: true, desempate: true, patrocinadores: true }, categorias: [], duplas: [], atletas: [], criado: Date.now() };
   S.torneios = [{ id, d: t }, ...S.torneios];
   await lote([['torneios/' + id, t], [`torneios/${id}/privado/config`, { mesarioToken: token() }]]);
   trocarTorneio(id); S.tab = 'categorias'; render();
@@ -167,16 +199,18 @@ const esperar = async (fn, ms = 8000) => { const t0 = Date.now(); while (!fn() &
 async function criarExemplo() {
   toast('Criando torneio de exemplo…');
   const id = uid();
-  const ini = { ...novaCat(), nome: 'Iniciante', chaves: 3, classificam: 2, extras: 2, vagas: 12, valor: 80 };
+  const ini = { ...novaCat(), nome: 'Iniciante', chaves: 3, classificam: 2, extras: 2, vagas: 12, valor: 80, finalSets: true };
   const mis = { ...novaCat(), nome: 'Misto', vagas: 8, valor: 45, cobranca: 'atleta' };
   const sor = { ...novaCat(), nome: 'Duplas sorteadas', vagas: 8, valor: 40, cobranca: 'atleta', modoDuplas: 'sorteadas', potes: true };
   const ats = ['Caio', 'Murilo', 'Renato', 'Fabrício', 'Wesley', 'Alan', 'Pietro', 'Cauã', 'Bento', 'Ravi', 'Theo', 'Yuri'].map((nome, i) => ({ id: uid(), cat: sor.id, nome, pote: i < 6 ? 1 : 2 }));
   const mk = (l, cat, n) => l.map((s, i) => { const [a, b] = s.split(' / '); return { id: uid(), cat, j1: a, j2: b, cabeca: i < n, chave: null }; });
   const ds = [...mk(['Rafa / Tiago', 'Bruno / Caio', 'Lucas / Pedro', 'Igor / Vitor', 'André / Felipe', 'Marcos / Diego', 'Heitor / Davi', 'Gui / Leo', 'João / Enzo', 'Thiago / Nico', 'Samuel / Otávio', 'Breno / Kauã'], ini.id, 3),
     ...mk(['Ana / Paulo', 'Bia / Renan', 'Carla / Edu', 'Duda / Fábio', 'Elis / Gabriel', 'Júlia / Hugo', 'Lara / Ivan', 'Nina / Jorge'], mis.id, 2)];
-  const t = { nome: 'Etapa Verão (exemplo)', data: new Date().toISOString().slice(0, 10), local: 'Arena de exemplo', quadras: ['Quadra 1', 'Quadra 2', 'Quadra 3'], duracao: 20, pix: 'financeiro@exemplo.com.br', pixNome: 'Arena de exemplo', contato: '(11) 90000-0000', patrocinadores: 'Master: Água de Coco Sol\nOuro: Loja da Areia\nApoio: Academia Ponto Forte', inscricoes: true, categorias: [ini, mis, sor], duplas: ds, atletas: ats, criado: Date.now(), exemplo: true };
+  const t = { nome: 'Etapa Verão (exemplo)', data: new Date().toISOString().slice(0, 10), local: 'Arena de exemplo', quadras: ['Quadra 1', 'Quadra 2', 'Quadra 3'], duracao: 20, pix: 'financeiro@exemplo.com.br', pixNome: 'Arena de exemplo', contato: '(11) 90000-0000', inscricoes: true, opcoes: { comprovante: true, desempate: true, patrocinadores: true }, categorias: [ini, mis, sor], duplas: ds, atletas: ats, criado: Date.now(), exemplo: true };
   S.torneios = [{ id, d: t }, ...S.torneios];
-  await lote([['torneios/' + id, t], [`torneios/${id}/privado/config`, { mesarioToken: token() }]]);
+  const pats = [['Água de Coco Sol', 'master', 'A água de coco oficial da arena', '@aguadecocosol'], ['Loja da Areia', 'ouro', 'Bolas, viseiras e camisetas', 'lojadaareia.com.br'], ['Academia Ponto Forte', 'apoio', '', '']]
+    .map(([nome, cota, frase, link], i) => [`torneios/${id}/patrocinadores/${uid()}`, { nome, cota, frase, link, logo: null, em: Date.now() + i }]);
+  await lote([['torneios/' + id, t], [`torneios/${id}/privado/config`, { mesarioToken: token() }], ...pats]);
   trocarTorneio(id);
   await sortear(ini); await sortear(mis);
   await esperar(() => S.jogos.filter(j => j.fase === 'grupo').length >= 30);
@@ -189,7 +223,9 @@ async function apagarTorneio() {
   const id = S.tid;
   const ins = await getDocs(C(`torneios/${id}/inscricoes`)).catch(() => null);
   const mes = await getDocs(C(`torneios/${id}/mesarios`)).catch(() => null);
-  await lote([...apagarJogosOps(), ...(ins?.docs || []).map(d => [d.ref.path, null]), ...(mes?.docs || []).map(d => [d.ref.path, null]), [`torneios/${id}/privado/config`, null], ['torneios/' + id, null]]);
+  const comp = await getDocs(C(`torneios/${id}/comprovantes`)).catch(() => null);
+  const pat = await getDocs(C(`torneios/${id}/patrocinadores`)).catch(() => null);
+  await lote([...apagarJogosOps(), ...[ins, mes, comp, pat].flatMap(q => (q?.docs || []).map(d => [d.ref.path, null])), [`torneios/${id}/privado/config`, null], ['torneios/' + id, null]]);
   S.torneios = S.torneios.filter(x => x.id !== id);
   trocarTorneio(S.torneios[0]?.id || null); S.tab = 'painel'; render(); toast('Torneio apagado.');
 }
@@ -213,9 +249,10 @@ async function decidirInsc(id, status) {
 /* ---------- assinaturas em tempo real ---------- */
 function assinarTorneio() {
   Object.keys(unsubs).forEach(k => { unsubs[k]?.(); unsubs[k] = null; });
-  S.jogos = []; S.insc = []; S.privado = null;
+  S.jogos = []; S.insc = []; S.privado = null; S.pats = [];
   if (!S.tid || !db) return;
   unsubs.jogos = onSnapshot(C(`torneios/${S.tid}/jogos`), s => { S.jogos = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, erro);
+  unsubs.pats = onSnapshot(C(`torneios/${S.tid}/patrocinadores`), s => { S.pats = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, () => { S.pats = []; });
   if (S.org) {
     unsubs.insc = onSnapshot(C(`torneios/${S.tid}/inscricoes`), s => { S.insc = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.em - a.em); render(); }, erro);
     unsubs.priv = onSnapshot(R(`torneios/${S.tid}/privado/config`), s => { S.privado = s.exists() ? s.data() : null; render(); }, erro);
@@ -308,20 +345,22 @@ const gameRow = (j, opts = {}) => {
   const c = catById(j.cat); const prev = opts.prev?.[j.id];
   const st = j.status === 'aovivo' ? `<span class="chip live">ao vivo · ${esc(j.quadra || '')}</span>` : j.status === 'fim' ? `<span class="chip ok">encerrado</span>` : `<span class="chip">na fila${prev ? ' · ~' + hora(prev) : ''}</span>`;
   const wa = j.status === 'fim' && j.vencedor === j.a, wb = j.status === 'fim' && j.vencedor === j.b;
+  const md3 = emSets(j), sv = L.setsVencidos(j.sets);
   const sc = j.status === 'agendado' ? '×' : `${j.pa} <span class="muted">×</span> ${j.pb}`;
+  const detSets = md3 && (j.sets || []).length ? `<span>${j.status === 'fim' ? 'Sets' : `Sets ${sv.a}×${sv.b} ·`} ${(j.sets || []).map(x => x.join('-')).join(', ')}${j.status === 'aovivo' ? ` · ${(j.sets || []).length + 1}º set` : ''}</span>` : (md3 ? '<span>Melhor de 3 sets</span>' : '');
   const fase = j.fase === 'grupo' ? (c?.formato === 'todos' ? `Rodada ${j.rodada}` : `Chave ${j.chave} · Rodada ${j.rodada}`) : j.rodadaNome;
   let edit = '';
   if (S.org && opts.edit && S.editJogo === j.id) {
     edit = `<form class="edit-row" data-form="editJogo" data-id="${j.id}">
-      <label class="check">${esc(dn(j.a))} <input id="ej-a-${j.id}" name="pa" type="number" min="0" value="${j.pa}"></label>
-      <label class="check"><input id="ej-b-${j.id}" name="pb" type="number" min="0" value="${j.pb}"> ${esc(dn(j.b))}</label>
+      ${md3 ? `<label class="field" style="flex:1 1 260px"><span>Sets (${esc(dn(j.a))} primeiro)</span><input id="ej-s-${j.id}" name="sets" type="text" placeholder="18-15, 15-18, 15-10" value="${esc(j.status === 'fim' ? (j.sets || []).map(x => x.join('-')).join(', ') : '')}"></label>` : `<label class="check">${esc(dn(j.a))} <input id="ej-a-${j.id}" name="pa" type="number" min="0" value="${j.pa}"></label>
+      <label class="check"><input id="ej-b-${j.id}" name="pb" type="number" min="0" value="${j.pb}"> ${esc(dn(j.b))}</label>`}
       <label class="check small"><input id="ej-f-${j.id}" name="forcar" type="checkbox"> aceitar fora da regra</label>
       <button class="btn sm">Salvar resultado</button>
       ${j.status !== 'agendado' ? `<button type="button" class="btn ghost sm" data-act="reabrir" data-id="${j.id}">Voltar para a fila</button>` : ''}
       <button type="button" class="link small" data-act="editJogo" data-id="">Cancelar</button></form>`;
   }
   return `<div class="game"><div class="t${wa ? ' win' : ''}">${esc(dn(j.a))}</div><div class="sc num">${sc}</div><div class="t b${wb ? ' win' : ''}">${esc(dn(j.b))}</div>
-   <div class="meta">${st}<span>${esc(c?.nome || '')}</span><span>${esc(fase || '')}</span>${S.org && opts.edit && S.editJogo !== j.id && j.a && j.b ? `<button class="link small" data-act="editJogo" data-id="${j.id}">Editar placar</button>` : ''}</div>${edit}</div>`;
+   <div class="meta">${st}<span>${esc(c?.nome || '')}</span><span>${esc(fase || '')}</span>${detSets}${S.org && opts.edit && S.editJogo !== j.id && j.a && j.b ? `<button class="link small" data-act="editJogo" data-id="${j.id}">Editar placar</button>` : ''}</div>${edit}</div>`;
 };
 const podioHTML = pd => `<div class="podium">${[0, 1, 2].map(i => `<div class="p p${i + 1}"><b>${i + 1}º</b>${esc(pd[i] ? dn(pd[i]) : '—')}${i === 2 && pd[3] ? '<br>' + esc(dn(pd[3])) : ''}</div>`).join('')}</div>`;
 
@@ -356,7 +395,12 @@ function painel() {
     <div class="small muted num">${f} de ${js.length} jogos</div>${pd ? podioHTML(pd) : ''}</div>`;
   }).join('') || '<p class="muted">Nenhuma categoria ainda.</p>'}</div></section>
   ${S.org ? compartilharHTML() : ''}
+  ${patsFaixa()}
   </div>`;
+}
+function patsFaixa() {
+  if (!opt('patrocinadores') || !S.pats.length) return '';
+  return `<section class="pats-strip" aria-label="Patrocinadores"><span class="label">Patrocínio</span><div class="row">${patsOrdem().map(p => { const inner = p.logo ? `<img src="${p.logo}" alt="${esc(p.nome)}">` : `<b>${esc(p.nome)}</b>`; const l = linkPat(p.link); return l ? `<a href="${esc(l)}" target="_blank" rel="noopener" title="${esc(p.nome)}">${inner}</a>` : `<span title="${esc(p.nome)}">${inner}</span>`; }).join('')}</div></section>`;
 }
 
 function config() {
@@ -371,17 +415,36 @@ function config() {
     <label class="field"><span>WhatsApp do organizador</span><input id="c-zap" name="contato" type="tel" value="${esc(t.contato)}"></label>
     <label class="field"><span>Chave Pix</span><input id="c-pix" name="pix" type="text" value="${esc(t.pix)}"></label>
     <label class="field"><span>Nome do recebedor</span><input id="c-pixn" name="pixNome" type="text" value="${esc(t.pixNome)}"></label>
-    <label class="field full"><span>Patrocinadores (um por linha, no formato Cota: Nome)</span><textarea id="c-pat" name="patrocinadores" placeholder="Master: Arena Sol&#10;Ouro: Loja da Areia">${esc(t.patrocinadores)}</textarea></label>
     <label class="check full"><input id="c-insc" name="inscricoes" type="checkbox"${t.inscricoes ? ' checked' : ''}> Inscrições online abertas</label>
+    <fieldset class="full opcoes"><legend>Funcionalidades</legend>
+      <label class="check"><input id="c-op1" name="op_comprovante" type="checkbox"${opt('comprovante') ? ' checked' : ''}> Pedir foto do comprovante do Pix na inscrição</label>
+      <label class="check"><input id="c-op2" name="op_desempate" type="checkbox"${opt('desempate') ? ' checked' : ''}> Permitir desempate manual na classificação</label>
+      <label class="check"><input id="c-op3" name="op_patrocinadores" type="checkbox"${opt('patrocinadores') ? ' checked' : ''}> Mostrar patrocinadores com logo e QR code no telão e no link público</label>
+      <p class="small muted" style="margin:0">A final em melhor de 3 sets é ligada em cada categoria, na aba Categorias.</p>
+    </fieldset>
     <div class="full"><button class="btn">Salvar torneio</button></div>
-  </form></div>`;
+  </form>
+  ${patsAdmin()}</div>`;
+}
+function patsAdmin() {
+  const lista = patsOrdem();
+  return `<section class="panel stack" style="gap:14px"><div class="sect-head"><div><h3>Patrocinadores</h3><p class="small muted" style="margin:0">${opt('patrocinadores') ? 'Aparecem no telão, com logo, frase e QR code, e no link público.' : 'Desativado nas funcionalidades acima: os patrocinadores ficam salvos, mas não aparecem.'}</p></div></div>
+    ${lista.length ? `<div class="pats-admin">${lista.map(p => `<div class="pat-item">${p.logo ? `<img src="${p.logo}" alt="">` : '<div class="pat-noimg">sem logo</div>'}<div style="min-width:0"><b>${esc(p.nome)}</b><div class="small muted">${cotaNome(p.cota)}${p.frase ? ' · ' + esc(p.frase) : ''}</div>${p.link ? `<div class="small muted" style="overflow-wrap:anywhere">${esc(linkPat(p.link))}</div>` : ''}</div><button class="link small" data-act="delPat" data-id="${p.id}">Remover</button></div>`).join('')}</div>` : '<p class="muted" style="margin:0">Nenhum patrocinador cadastrado.</p>'}
+    <form class="form" data-form="pat">
+      <label class="field"><span>Nome</span><input id="pt-nome" name="nome" type="text" maxlength="60" required></label>
+      <label class="field"><span>Cota</span><select id="pt-cota" name="cota">${COTAS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
+      <label class="field full"><span>Frase (opcional)</span><input id="pt-frase" name="frase" type="text" maxlength="90" placeholder="Ex.: O açaí oficial da arena"></label>
+      <label class="field"><span>Link para o QR code (site, Instagram ou WhatsApp)</span><input id="pt-link" name="link" type="text" maxlength="200" placeholder="@perfil ou site.com.br"></label>
+      <label class="field"><span>Logo (PNG ou JPG)</span><input id="pt-logo" name="logo" type="file" accept="image/*"></label>
+      <div class="full"><button class="btn">Adicionar patrocinador</button></div>
+    </form></section>`;
 }
 
 function categorias() {
   const t = T();
   const formatoTxt = c => ({ grupos: `Grupos (${c.chaves} chaves, ${c.classificam} por chave${+c.extras ? ` + ${c.extras} melhores ${+c.classificam + 1}º` : ''}) + mata-mata`, todos: 'Todos contra todos', mata: 'Mata-mata direto' })[c.formato];
   return `<div class="stack"><div class="sect-head"><div><h2>Categorias</h2><p class="muted small" style="margin:0">Cada categoria tem formato, pontuação, vagas e quadras próprias.</p></div><button class="btn" data-act="addCat">Adicionar categoria</button></div>
-  ${cats().map(c => S.editCat === c.id ? catForm(c, t) : `<div class="panel row between"><div style="min-width:0"><h3>${esc(c.nome)}</h3><div class="small muted">${formatoTxt(c)}${sorteadas(c) ? ` · duplas sorteadas${c.potes ? ' com 2 potes' : ''}` : ''} · ${regraTxt(c)} · ${c.vagas} vagas · ${brl(c.valor)}/${c.cobranca}${c.quadras?.length ? ' · ' + esc(c.quadras.join(', ')) : ''}</div></div>
+  ${cats().map(c => S.editCat === c.id ? catForm(c, t) : `<div class="panel row between"><div style="min-width:0"><h3>${esc(c.nome)}</h3><div class="small muted">${formatoTxt(c)}${sorteadas(c) ? ` · duplas sorteadas${c.potes ? ' com 2 potes' : ''}` : ''} · ${regraTxt(c)}${c.finalSets && c.formato !== 'todos' ? ` · final em 3 sets (${c.pontosSet || c.pontos}/${c.pontosSet || c.pontos}/${c.pontosTie || 15})` : ''} · ${c.vagas} vagas · ${brl(c.valor)}/${c.cobranca}${c.quadras?.length ? ' · ' + esc(c.quadras.join(', ')) : ''}</div></div>
     <div class="row"><button class="btn ghost sm" data-act="editCat" data-id="${c.id}">Editar</button><button class="btn danger sm" data-act="delCat" data-id="${c.id}">Remover</button></div></div>`).join('') || '<div class="panel muted">Nenhuma categoria. Adicione Iniciante, Misto, Feminino…</div>'}
   </div>`;
 }
@@ -398,6 +461,8 @@ function catForm(c, t) {
    <label class="check"><input id="cf-3" name="terceiro" type="checkbox"${c.terceiro ? ' checked' : ''}> Disputa de 3º lugar</label>
    <label class="field"><span>Como as duplas são formadas</span><select id="cf-modo" name="modoDuplas"><option value="fixas"${!sorteadas(c) ? ' selected' : ''}>Duplas fixas (se inscrevem juntas)</option><option value="sorteadas"${sorteadas(c) ? ' selected' : ''}>Duplas sorteadas entre os atletas</option></select></label>
    <label class="check"><input id="cf-potes" name="potes" type="checkbox"${c.potes ? ' checked' : ''}> Sortear com 2 potes (cada dupla tem um atleta de cada pote)</label>
+   <label class="check full"><input id="cf-fs" name="finalSets" type="checkbox"${c.finalSets ? ' checked' : ''}> Final em melhor de 3 sets</label>
+   ${f('pontosSet', 'Sets da final até (pontos)', c.pontosSet || c.pontos || 18, 'number', 'min="1"')}${f('pontosTie', '3º set até (pontos)', c.pontosTie || 15, 'number', 'min="1"')}
    <fieldset class="full" style="border:1px solid var(--line);border-radius:8px"><legend class="small muted">Quadras desta categoria (nenhuma marcada = todas)</legend><div class="row">${(t.quadras || []).map((q, i) => `<label class="check"><input id="cf-q${i}" type="checkbox" name="q" value="${esc(q)}"${c.quadras?.includes(q) ? ' checked' : ''}> ${esc(q)}</label>`).join('')}</div></fieldset>
    <div class="row full"><button class="btn">Salvar categoria</button><button type="button" class="btn ghost" data-act="editCat" data-id="">Cancelar</button></div></form>`;
 }
@@ -473,12 +538,15 @@ function classificacao() {
   if (c.formato === 'mata') return `<div class="stack"><div class="sect-head"><h2>Classificação · ${esc(c.nome)}</h2>${pk}</div><div class="panel muted">Esta categoria é mata-mata direto. Veja a aba Mata-mata.</div></div>`;
   const chs = chavesCat(c.id); const gj = S.jogos.filter(j => j.cat === c.id && j.fase === 'grupo'); const done = gj.length && gj.every(j => j.status === 'fim');
   const temMata = S.jogos.some(j => j.cat === c.id && j.fase === 'mata');
-  const sel = new Set(c.formato === 'grupos' ? L.classificados(c, duplas(), S.jogos) : []);
-  return `<div class="stack"><div class="sect-head"><div><h2>Classificação · ${esc(c.nome)}</h2><p class="muted small" style="margin:0">Critérios: vitórias, saldo, pontos feitos e confronto direto.</p></div><div class="row">${pk}
+  const sel = new Set(c.formato === 'grupos' ? L.classificados(c, duplas(), S.jogos, manuais()) : []);
+  return `<div class="stack"><div class="sect-head"><div><h2>Classificação · ${esc(c.nome)}</h2><p class="muted small" style="margin:0">Critérios: vitórias, saldo, pontos feitos${opt('desempate') ? ', desempate do organizador' : ''} e confronto direto.</p></div><div class="row">${pk}
    ${S.org && c.formato === 'grupos' ? `<button class="btn" data-act="gerarMata" data-id="${c.id}"${done ? '' : ' disabled'}>${temMata ? 'Refazer mata-mata' : 'Gerar mata-mata'}</button>` : ''}</div></div>
    ${S.org && c.formato === 'grupos' && !done && gj.length ? `<p class="small muted" style="margin:0">O mata-mata fica disponível quando os ${gj.length} jogos da fase de grupos terminarem (${gj.filter(j => j.status === 'fim').length} encerrados).</p>` : ''}
-  ${chs.length ? `<div class="grid2">${chs.map(ch => `<section class="panel"><h3>${c.formato === 'todos' ? 'Tabela' : 'Chave ' + ch}</h3><div class="tw"><table><thead><tr><th></th><th>Dupla</th><th class="n">J</th><th class="n">V</th><th class="n">SG</th><th class="n">PF</th></tr></thead><tbody>
-    ${tabela(c.id, ch).map((r, i) => `<tr class="${(c.formato === 'grupos' ? sel.has(r.id) : i < 3) ? 'q' : ''}"><td class="pos">${i + 1}</td><td>${esc(dn(r.id))}</td><td class="n">${r.j}</td><td class="n">${r.v}</td><td class="n">${r.sg > 0 ? '+' : ''}${r.sg}</td><td class="n">${r.pp}</td></tr>`).join('')}</tbody></table></div></section>`).join('')}</div>
+  ${chs.length ? `<div class="grid2">${chs.map(ch => `<section class="panel"><h3>${c.formato === 'todos' ? 'Tabela' : 'Chave ' + ch}</h3><div class="tw"><table><thead><tr><th></th><th>Dupla</th><th class="n">J</th><th class="n">V</th><th class="n">SG</th><th class="n">PF</th>${S.org && opt('desempate') ? '<th></th>' : ''}</tr></thead><tbody>
+    ${(() => { const tb = tabela(c.id, ch), mov = S.org && opt('desempate'), igual = (x, y) => x && y && x.v === y.v && x.sg === y.sg && x.pp === y.pp && x.j > 0;
+      return tb.map((r, i) => `<tr class="${(c.formato === 'grupos' ? sel.has(r.id) : i < 3) ? 'q' : ''}"><td class="pos">${i + 1}</td><td>${esc(dn(r.id))}${r.empate && r.j > 0 && S.org ? ' <span class="chip">empate</span>' : ''}</td><td class="n">${r.j}</td><td class="n">${r.v}</td><td class="n">${r.sg > 0 ? '+' : ''}${r.sg}</td><td class="n">${r.pp}</td>${mov ? `<td class="n mv">${igual(r, tb[i - 1]) ? `<button class="link" data-act="desempate" data-c="${c.id}" data-ch="${ch}" data-i="${i}" data-dir="-1" aria-label="Subir ${esc(dn(r.id))}">▲</button>` : ''}${igual(r, tb[i + 1]) ? `<button class="link" data-act="desempate" data-c="${c.id}" data-ch="${ch}" data-i="${i}" data-dir="1" aria-label="Descer ${esc(dn(r.id))}">▼</button>` : ''}</td>` : ''}</tr>`).join(''); })()}</tbody></table></div>
+    ${S.org && opt('desempate') && manuais()[c.id + '|' + ch] ? `<button class="link small" data-act="limparDesempate" data-c="${c.id}" data-ch="${ch}">Desfazer desempate manual desta chave</button>` : ''}</section>`).join('')}</div>
+    ${S.org && opt('desempate') ? '<p class="small muted" style="margin:0">Quando duas duplas empatam em vitórias, saldo e pontos, use ▲ ▼ para definir a ordem.</p>' : ''}
     <p class="small muted" style="margin:0">A barra verde marca as duplas ${c.formato === 'todos' ? 'no pódio' : 'classificadas para o mata-mata'}.</p>` : '<div class="panel muted">A classificação aparece depois do sorteio das chaves.</div>'}</div>`;
 }
 
@@ -513,13 +581,16 @@ function mesario() {
     return `<div class="stack"><h2>Mesário · ${esc(S.quadra)}</h2>${qsel}<div class="board"><div class="bar"><span>Quadra livre</span></div>
     ${nx ? `<div style="text-align:center"><div class="label" style="color:var(--board-dim)">Próximo da fila · ${esc(catById(nx.cat)?.nome || '')} · ${esc(nx.fase === 'grupo' ? 'Chave ' + nx.chave : nx.rodadaNome)}</div><h2 style="margin:8px 0 16px">${esc(dn(nx.a))} × ${esc(dn(nx.b))}</h2><button class="btn" data-act="chamar">Chamar próximo jogo</button></div>` : '<p style="text-align:center;margin:0">Nenhum jogo disponível para esta quadra agora.</p>'}</div></div>`;
   }
-  const c = catById(j.cat), fim = L.fimValido(c, j.pa, j.pb);
+  const c = catById(j.cat), md3 = emSets(j), rg = regraAtual(j), fim = L.fimValido(rg, j.pa, j.pb);
+  const sv = L.setsVencidos(j.sets), nSet = (j.sets || []).length + 1;
+  const decide = md3 && fim && ((j.pa > j.pb ? sv.a : sv.b) + 1 === 2);
   const side = (k, id) => `<div class="side"><div class="nm">${esc(dn(id))}</div><div class="pt">${j[k]}</div><div class="pm"><button class="minus" data-act="ponto" data-k="${k}" data-d="-1" aria-label="Tirar ponto"${j[k] <= 0 ? ' disabled' : ''}>−</button><button class="plus" data-act="ponto" data-k="${k}" data-d="1" aria-label="Somar ponto"${fim ? ' disabled' : ''}>+</button></div></div>`;
   return `<div class="stack"><h2>Mesário · ${esc(S.quadra)}</h2>${qsel}
-  <div class="board"><div class="bar"><span class="chip live">ao vivo</span><span>${esc(c.nome)} · ${esc(j.fase === 'grupo' ? 'Chave ' + j.chave : j.rodadaNome)} · ${regraTxt(c)}</span></div>
+  <div class="board"><div class="bar"><span class="chip live">ao vivo</span><span>${esc(c.nome)} · ${esc(j.fase === 'grupo' ? 'Chave ' + j.chave : j.rodadaNome)} · ${md3 ? `${nSet}º set até ${rg.pontos}${c.vantagem ? ', vantagem de 2' : ''}` : regraTxt(c)}</span></div>
+   ${md3 ? `<div class="setsbar"><span>Sets</span><b class="num">${sv.a} × ${sv.b}</b>${(j.sets || []).length ? `<span>${(j.sets || []).map(x => x.join('-')).join(' · ')}</span>` : ''}</div>` : ''}
    <div class="sides">${side('pa', j.a)}${side('pb', j.b)}</div>
    <div class="row between"><button class="btn ghost sm" style="color:var(--board-ink);border-color:#2c4657" data-act="devolver">Devolver à fila</button>
-   <button class="btn" data-act="encerrar"${fim ? '' : ' disabled'}>${fim ? 'Encerrar jogo' : 'Jogo em andamento'}</button></div></div></div>`;
+   <button class="btn" data-act="encerrar"${fim ? '' : ' disabled'}>${!fim ? (md3 ? `${nSet}º set em andamento` : 'Jogo em andamento') : md3 && !decide ? `Fechar ${nSet}º set` : 'Encerrar jogo'}</button></div></div></div>`;
 }
 
 function inscricao() {
@@ -534,14 +605,16 @@ function inscricao() {
     <p class="full small muted" id="in-ind" style="margin:0"${ind ? '' : ' hidden'}>Nesta categoria as duplas são sorteadas entre os atletas inscritos. Inscreva só você.</p>
     <label class="field full"><span>WhatsApp para contato</span><input id="in-z" name="zap" type="tel" maxlength="30" required placeholder="(11) 90000-0000"></label>
     <div class="full">${pixBox}</div>
-    <p class="full small muted" style="margin:0">Faça o Pix e envie o comprovante ao organizador${t.contato ? ' pelo WhatsApp ' + esc(t.contato) : ''}. A inscrição vale depois da aprovação.</p>
+    ${opt('comprovante') ? `<label class="field full"><span>Comprovante do Pix (foto ou print)</span><input id="in-f" name="foto" type="file" accept="image/*" required></label>
+    <p class="full small muted" style="margin:0">Faça o Pix, anexe o comprovante e envie. A inscrição vale depois da aprovação do organizador.</p>` :
+    `<p class="full small muted" style="margin:0">Faça o Pix e envie o comprovante ao organizador${t.contato ? ' pelo WhatsApp ' + esc(t.contato) : ''}. A inscrição vale depois da aprovação.</p>`}
     <div class="full"><button class="btn">Enviar inscrição</button></div></form>`;
   const chipI = s => s === 'aprovada' ? '<span class="chip ok">aprovada</span>' : s === 'recusada' ? '<span class="chip">recusada</span>' : '<span class="chip sea">pendente</span>';
   if (S.org) {
     const pend = S.insc.filter(i => i.status === 'pendente'), dec = S.insc.filter(i => i.status !== 'pendente');
     return `<div class="stack"><div class="sect-head"><div><h2>Inscrições</h2><p class="muted small" style="margin:0">${t.inscricoes ? 'Abertas' : 'Fechadas'} · ${pend.length} pendentes · ${dec.filter(i => i.status === 'aprovada').length} aprovadas · ${dec.filter(i => i.status === 'recusada').length} recusadas</p></div><button class="btn ghost sm" data-act="copiar" data-k="inscricao">Copiar link de inscrição</button></div>
     <section class="panel"><div class="games">${pend.map(i => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto"><div class="t"><b>${esc(nomeInsc(i))}</b><div class="small muted">${esc(catById(i.cat)?.nome || '')} · ${brl(catById(i.cat)?.valor)} · ${hora(i.em)} · WhatsApp <span style="user-select:all">${esc(i.zap)}</span></div></div>
-      <div class="row"><button class="btn sm" data-act="insc" data-id="${i.id}" data-s="aprovada">Aprovar</button><button class="btn ghost sm" data-act="insc" data-id="${i.id}" data-s="recusada">Recusar</button></div></div>`).join('') || '<p class="muted">Nenhuma inscrição pendente.</p>'}</div></section>
+      <div class="row">${i.comprovante ? `<button class="btn ghost sm" data-act="verComp" data-id="${i.id}">Ver comprovante</button>` : '<span class="small muted">sem comprovante</span>'}<button class="btn sm" data-act="insc" data-id="${i.id}" data-s="aprovada">Aprovar</button><button class="btn ghost sm" data-act="insc" data-id="${i.id}" data-s="recusada">Recusar</button></div></div>`).join('') || '<p class="muted">Nenhuma inscrição pendente.</p>'}</div></section>
     ${dec.length ? `<section class="panel"><h3>Já decididas</h3><div class="games">${dec.map(i => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto"><div class="t">${esc(nomeInsc(i))} <span class="small muted">· ${esc(catById(i.cat)?.nome || '')}</span></div>${chipI(i.status)}</div>`).join('')}</div></section>` : ''}
     <details class="panel"><summary class="small" style="cursor:pointer">Ver o formulário como os atletas veem</summary><div style="margin-top:12px">${form}</div></details></div>`;
   }
@@ -554,7 +627,7 @@ function inscricao() {
 function tvSlides() {
   const t = T(); if (!t) return []; const sl = []; const prev = previsoes();
   const ao = S.jogos.filter(j => j.status === 'aovivo');
-  if (ao.length) sl.push(`<h2>Em quadra agora</h2><div class="tvgames">${ao.map(j => `<div class="tvg"><div class="nm">${esc(dn(j.a))}</div><div class="pt num">${j.pa} <span style="color:#8ea3af">×</span> ${j.pb}</div><div class="nm b">${esc(dn(j.b))}</div><div class="mt">${esc(j.quadra)} · ${esc(catById(j.cat)?.nome || '')} · ${esc(j.fase === 'grupo' ? 'Chave ' + j.chave : j.rodadaNome)}</div></div>`).join('')}</div>`);
+  if (ao.length) sl.push(`<h2>Em quadra agora</h2><div class="tvgames">${ao.map(j => `<div class="tvg"><div class="nm">${esc(dn(j.a))}</div><div class="pt num">${j.pa} <span style="color:#8ea3af">×</span> ${j.pb}</div><div class="nm b">${esc(dn(j.b))}</div><div class="mt">${esc(j.quadra)} · ${esc(catById(j.cat)?.nome || '')} · ${esc(j.fase === 'grupo' ? 'Chave ' + j.chave : j.rodadaNome)}${emSets(j) ? ` · ${(j.sets || []).length + 1}º set · sets ${L.setsVencidos(j.sets).a}×${L.setsVencidos(j.sets).b}` : ''}</div></div>`).join('')}</div>`);
   const nx = fila().slice(0, 7);
   if (nx.length) sl.push(`<h2>Próximos jogos</h2><div class="tvlist">${nx.map(j => `<div><span class="num">~${hora(prev[j.id])}</span><span>${esc(dn(j.a))} × ${esc(dn(j.b))}</span><span style="color:#8ea3af">${esc(catById(j.cat)?.nome || '')}</span></div>`).join('')}</div>`);
   cats().forEach(c => {
@@ -566,7 +639,13 @@ function tvSlides() {
     const b = bracketHTML(c); if (b) sl.push(`<h2>${esc(c.nome)} · Mata-mata</h2>${b}`);
     const pd = podio(c); if (pd) sl.push(`<h2>${esc(c.nome)} · Pódio</h2>${podioHTML(pd)}`);
   });
-  const sp = (t.patrocinadores || '').split('\n').map(s => s.trim()).filter(Boolean);
+  if (opt('patrocinadores') && S.pats.length) {
+    const ps = patsOrdem(), card = (p, big) => `<div class="tvpat${big ? ' big' : ''}">${p.logo ? `<img class="logo" src="${p.logo}" alt="${esc(p.nome)}">` : `<b class="nome">${esc(p.nome)}</b>`}<div class="tx">${p.logo ? `<b>${esc(p.nome)}</b>` : ''}${p.frase ? `<span>${esc(p.frase)}</span>` : ''}</div>${p.link ? `<div class="qrbox">${qrImg(linkPat(p.link))}</div>` : ''}</div>`;
+    ps.filter(p => p.cota === 'master').forEach(p => sl.push(`<h2>Patrocínio master</h2>${card(p, true)}`));
+    const outros = ps.filter(p => p.cota !== 'master');
+    for (let i = 0; i < outros.length; i += 6) sl.push(`<h2>Patrocinadores</h2><div class="tvpats">${outros.slice(i, i + 6).map(p => card(p, false)).join('')}</div>`);
+  }
+  const sp = opt('patrocinadores') && !S.pats.length ? (t.patrocinadores || '').split('\n').map(s => s.trim()).filter(Boolean) : [];
   if (sp.length) sl.push(`<h2>Patrocinadores</h2><div class="spons">${sp.map(s => { const [a, ...b] = s.split(':'); return b.length ? `<div><span style="color:#8ea3af;text-transform:uppercase;letter-spacing:.1em">${esc(a)}</span><b>${esc(b.join(':').trim())}</b></div>` : `<div><b>${esc(s)}</b></div>`; }).join('')}</div>`);
   if (!sl.length) sl.push(`<h2>${esc(t.nome)}</h2><p style="font-size:1.6rem;color:#8ea3af">Os jogos aparecem aqui assim que as chaves forem sorteadas.</p>`);
   return sl;
@@ -575,13 +654,14 @@ let tvTimer = null, wake = null;
 function renderTV() {
   if (!S.tv) { $('#tvroot').innerHTML = ''; return; }
   const t = T(), sl = tvSlides(); S.tvIdx %= sl.length;
-  const sp = (t?.patrocinadores || '').split('\n').map(s => s.split(':').pop().trim()).filter(Boolean);
+  const sp = !opt('patrocinadores') ? [] : S.pats.length ? patsOrdem().map(p => p.nome) : (t?.patrocinadores || '').split('\n').map(s => s.split(':').pop().trim()).filter(Boolean);
   $('#tvroot').innerHTML = `<div class="tv" role="dialog" aria-label="Modo TV"><div class="tvh"><h1>${esc(t?.nome || '')}</h1><div class="row"><span class="chip live" style="font-size:.9rem">ao vivo</span><button class="tvx" data-act="tvFull">Tela cheia</button><button class="tvx" data-act="fecharTV">Sair</button></div></div>
    <div class="slide">${sl[S.tvIdx]}</div>
    <div class="foot"><span>${sp.length ? 'Patrocínio: ' + sp.map(esc).join(' · ') : esc(t?.local || '')}</span><div class="dots">${sl.map((_, i) => `<i class="${i === S.tvIdx ? 'on' : ''}"></i>`).join('')}</div></div></div>`;
 }
 function abrirTV() { S.tv = true; S.tvIdx = 0; clearInterval(tvTimer); tvTimer = setInterval(() => { S.tvIdx++; renderTV(); }, 12000); renderTV(); navigator.wakeLock?.request('screen').then(w => wake = w).catch(() => { }); }
 function renderModal() {
+  if (S.foto) { $('#modal').innerHTML = `<div class="modal foto"><div class="box" role="dialog" aria-modal="true" aria-label="Comprovante"><img src="${S.foto}" alt="Comprovante do Pix"><button class="btn" data-act="fecharFoto">Fechar</button></div></div>`; return; }
   if (!S.modal) { $('#modal').innerHTML = ''; return; }
   $('#modal').innerHTML = `<div class="modal"><div class="box" role="alertdialog" aria-modal="true"><p style="margin:0">${esc(S.modal.msg)}</p><div class="row" style="justify-content:flex-end"><button class="btn ghost" data-act="modalNo">Cancelar</button><button class="btn" data-act="modalOk">${esc(S.modal.ok)}</button></div></div></div>`;
 }
@@ -620,12 +700,18 @@ const ACT = {
   quadra: d => { S.quadra = d.q; lsSet('quadra', d.q); render(); },
   chamar: () => chamar(S.quadra),
   ponto: d => {
-    const j = jogoAoVivo(); if (!j) return; const c = catById(j.cat); const v = j[d.k] + (+d.d);
-    if (v < 0 || (+d.d > 0 && L.fimValido(c, j.pa, j.pb))) return;
+    const j = jogoAoVivo(); if (!j) return; const v = j[d.k] + (+d.d);
+    if (v < 0 || (+d.d > 0 && L.fimValido(regraAtual(j), j.pa, j.pb))) return;
     j[d.k] = v; render(); navigator.vibrate?.(30); updD(jp(j.id), { [d.k]: v });
   },
-  encerrar: () => { const j = jogoAoVivo(); if (!j) return; confirmar(`Encerrar ${dn(j.a)} ${j.pa} × ${j.pb} ${dn(j.b)}?`, 'Encerrar jogo', () => finalizar(j, j.pa, j.pb)); },
-  devolver: () => { const j = jogoAoVivo(); if (!j) return; confirmar('Devolver este jogo para a fila? O placar será zerado.', 'Devolver', () => updD(jp(j.id), { status: 'agendado', quadra: null, pa: 0, pb: 0 })); },
+  encerrar: () => {
+    const j = jogoAoVivo(); if (!j) return;
+    if (!emSets(j)) return confirmar(`Encerrar ${dn(j.a)} ${j.pa} × ${j.pb} ${dn(j.b)}?`, 'Encerrar jogo', () => finalizar(j, j.pa, j.pb));
+    const sets = [...(j.sets || []), [j.pa, j.pb]], sv = L.setsVencidos(sets), n = sets.length;
+    if (sv.a === 2 || sv.b === 2) return confirmar(`Encerrar a final: ${dn(j.a)} ${sv.a} × ${sv.b} ${dn(j.b)} (${sets.map(x => x.join('-')).join(', ')})?`, 'Encerrar final', () => finalizar(j, sv.a, sv.b, sets));
+    confirmar(`Fechar o ${n}º set em ${j.pa} × ${j.pb}?`, `Fechar ${n}º set`, () => updD(jp(j.id), { sets, pa: 0, pb: 0 }));
+  },
+  devolver: () => { const j = jogoAoVivo(); if (!j) return; confirmar('Devolver este jogo para a fila? O placar será zerado.', 'Devolver', () => updD(jp(j.id), { status: 'agendado', quadra: null, pa: 0, pb: 0, sets: [] })); },
   copiarPix: () => copiar(T()?.pix || ''),
   copiar: d => { const u = links()[d.k]; if (u) copiar(u); },
   novoToken: () => confirmar('Gerar um novo link de mesário? Quem usa o link atual perde o acesso e precisa receber o novo.', 'Gerar novo link', async () => {
@@ -634,6 +720,18 @@ const ACT = {
     toast('Novo link de mesário gerado.');
   }),
   insc: d => decidirInsc(d.id, d.s),
+  verComp: async d => {
+    try { const s = await getDoc(R(`torneios/${S.tid}/comprovantes/${d.id}`)); if (!s.exists()) return toast('Comprovante não encontrado.'); S.foto = s.data().img; renderModal(); } catch (e) { erro(e); }
+  },
+  fecharFoto: () => { S.foto = null; renderModal(); },
+  delPat: d => confirmar('Remover este patrocinador?', 'Remover', () => delD(`torneios/${S.tid}/patrocinadores/${d.id}`)),
+  desempate: d => {
+    const key = d.c + '|' + d.ch, tb = tabela(d.c, d.ch).map(r => r.id), i = +d.i, k = i + (+d.dir);
+    if (k < 0 || k >= tb.length) return;
+    [tb[i], tb[k]] = [tb[k], tb[i]];
+    saveT({ desempate: { ...(T().desempate || {}), [key]: tb } }); render();
+  },
+  limparDesempate: d => { const m = { ...(T().desempate || {}) }; delete m[d.c + '|' + d.ch]; saveT({ desempate: m }); render(); },
   fecharTV: () => { S.tv = false; clearInterval(tvTimer); wake?.release?.(); document.fullscreenElement && document.exitFullscreen?.().catch(() => { }); renderTV(); },
   tvFull: () => { document.documentElement.requestFullscreen?.().catch(() => toast('Tela cheia indisponível neste aparelho.')); },
   modalNo: () => { S.modal = null; renderModal(); },
@@ -658,10 +756,10 @@ document.addEventListener('change', e => {
 const num = (v, d, min) => Math.max(min, Number.isFinite(+v) && v !== '' ? +v : d);
 const FORM = {
   novoT: fd => { S.novoT = false; criarTorneio(Object.fromEntries(fd)).catch(() => { }); },
-  config: fd => { const o = Object.fromEntries(fd); saveT({ nome: o.nome, data: o.data, local: o.local, quadras: o.quadras.split(',').map(s => s.trim()).filter(Boolean), duracao: num(o.duracao, 20, 5), contato: o.contato, pix: o.pix, pixNome: o.pixNome, patrocinadores: o.patrocinadores, inscricoes: fd.has('inscricoes') }).then(() => toast('Torneio salvo.')); },
+  config: fd => { const o = Object.fromEntries(fd); saveT({ nome: o.nome, data: o.data, local: o.local, quadras: o.quadras.split(',').map(s => s.trim()).filter(Boolean), duracao: num(o.duracao, 20, 5), contato: o.contato, pix: o.pix, pixNome: o.pixNome, inscricoes: fd.has('inscricoes'), opcoes: { comprovante: fd.has('op_comprovante'), desempate: fd.has('op_desempate'), patrocinadores: fd.has('op_patrocinadores') } }).then(() => toast('Torneio salvo.')); },
   cat: (fd, f) => {
     const o = Object.fromEntries(fd); const id = f.dataset.id;
-    const up = { nome: o.nome, formato: o.formato, chaves: num(o.chaves, 1, 1), classificam: num(o.classificam, 1, 1), extras: num(o.extras, 0, 0), pontos: num(o.pontos, 18, 1), teto: num(o.teto, 0, 0), vagas: num(o.vagas, 2, 2), valor: num(o.valor, 0, 0), cobranca: o.cobranca, vantagem: fd.has('vantagem'), terceiro: fd.has('terceiro'), quadras: fd.getAll('q'), modoDuplas: o.modoDuplas === 'sorteadas' ? 'sorteadas' : 'fixas', potes: fd.has('potes') };
+    const up = { nome: o.nome, formato: o.formato, chaves: num(o.chaves, 1, 1), classificam: num(o.classificam, 1, 1), extras: num(o.extras, 0, 0), pontos: num(o.pontos, 18, 1), teto: num(o.teto, 0, 0), vagas: num(o.vagas, 2, 2), valor: num(o.valor, 0, 0), cobranca: o.cobranca, vantagem: fd.has('vantagem'), terceiro: fd.has('terceiro'), quadras: fd.getAll('q'), modoDuplas: o.modoDuplas === 'sorteadas' ? 'sorteadas' : 'fixas', potes: fd.has('potes'), finalSets: fd.has('finalSets'), pontosSet: num(o.pontosSet, 18, 1), pontosTie: num(o.pontosTie, 15, 1) };
     S.editCat = null; saveT({ categorias: cats().map(c => c.id === id ? { ...c, ...up } : c) }).then(() => toast('Categoria salva.'));
   },
   addDupla: (fd, f) => { const o = Object.fromEntries(fd); saveT({ duplas: [...duplas(), { id: uid(), cat: S.cat, j1: o.j1.trim(), j2: o.j2.trim(), cabeca: fd.has('cabeca'), chave: null }] }); f.reset(); },
@@ -670,6 +768,13 @@ const FORM = {
     if (!novas.length) return toast('Nenhuma dupla reconhecida. Use o formato Atleta / Atleta.');
     saveT({ duplas: [...duplas(), ...novas] }).then(() => toast(`${novas.length} duplas importadas.`)); f.reset();
   },
+  pat: async (fd, f) => {
+    const o = Object.fromEntries(fd); const nome = String(o.nome || '').trim().slice(0, 60); if (!nome) return;
+    let logo = null; const file = fd.get('logo');
+    if (file && file.size) { try { logo = await comprimirImagem(file, 520, 280000, true); } catch (e) { return toast(e.message === 'formato' ? 'Não consegui abrir esta imagem. Use PNG ou JPG.' : 'O logo ficou grande demais. Use uma imagem menor.'); } }
+    const id = uid(); await setD(`torneios/${S.tid}/patrocinadores/${id}`, { nome, cota: COTAS.some(c => c[0] === o.cota) ? o.cota : 'apoio', frase: String(o.frase || '').trim().slice(0, 90), link: String(o.link || '').trim().slice(0, 200), logo, em: Date.now() });
+    f.reset(); toast('Patrocinador adicionado.');
+  },
   addAtleta: (fd, f) => { const nome = String(fd.get('nome')).trim().slice(0, 60); if (!nome) return; saveT({ atletas: [...atletas(), { id: uid(), cat: S.cat, nome, pote: +fd.get('pote') || 1 }] }); f.reset(); },
   colarAtletas: (fd, f) => {
     const novos = L.lerAtletas(fd.get('lista')).map(a => ({ id: uid(), cat: S.cat, nome: a.nome.slice(0, 60), pote: a.pote || 1 }));
@@ -677,7 +782,14 @@ const FORM = {
     saveT({ atletas: [...atletas(), ...novos] }).then(() => toast(`${novos.length} atletas importados.`)); f.reset();
   },
   editJogo: (fd, f) => {
-    const j = S.jogos.find(x => x.id === f.dataset.id); const pa = +fd.get('pa'), pb = +fd.get('pb'); const c = catById(j.cat);
+    const j = S.jogos.find(x => x.id === f.dataset.id); const c = catById(j.cat);
+    if (emSets(j)) {
+      const sets = L.lerSets(fd.get('sets')); const er = L.validarSets(c, sets);
+      if (er && !(fd.has('forcar') && sets.length && sets.every(Boolean))) return toast(er + (sets.length && sets.every(Boolean) ? ' Marque "aceitar fora da regra" para salvar mesmo assim.' : ''));
+      const sv = L.setsVencidos(sets); if (sv.a === sv.b) return toast('A final precisa ter um vencedor.');
+      S.editJogo = null; return finalizar(j, sv.a, sv.b, sets).then(() => toast('Resultado da final salvo.'));
+    }
+    const pa = +fd.get('pa'), pb = +fd.get('pb');
     if (pa === pb) return toast('O jogo não pode terminar empatado.');
     if (!L.fimValido(c, pa, pb) && !fd.has('forcar')) return toast(`Placar fora da regra (${regraTxt(c)}). Marque "aceitar fora da regra" para salvar mesmo assim.`);
     S.editJogo = null; finalizar(j, pa, pb).then(() => toast('Resultado salvo. Classificação recalculada.'));
@@ -687,7 +799,13 @@ const FORM = {
     if (sorteadas(c)) o.j2 = ''; else if (!String(o.j2 || '').trim()) return toast('Informe o nome dos dois atletas.');
     try {
       const u = await ensureAuth(); const id = uid();
-      const item = { cat: o.cat, j1: o.j1.trim().slice(0, 60), j2: String(o.j2 || '').trim().slice(0, 60), zap: o.zap.trim().slice(0, 30), status: 'pendente', em: Date.now(), uid: u.uid };
+      let img = null;
+      if (opt('comprovante')) {
+        const file = fd.get('foto'); if (!file || !file.size) return toast('Anexe a foto ou o print do comprovante do Pix.');
+        try { img = await comprimirImagem(file, 1400, 700000); } catch (e) { return toast(e.message === 'formato' ? 'Não consegui abrir esta imagem. Envie um print em JPG ou PNG.' : 'A imagem ficou grande demais. Tente um print da tela do comprovante.'); }
+      }
+      const item = { cat: o.cat, j1: o.j1.trim().slice(0, 60), j2: String(o.j2 || '').trim().slice(0, 60), zap: o.zap.trim().slice(0, 30), status: 'pendente', em: Date.now(), uid: u.uid, comprovante: !!img };
+      if (img) await setDoc(R(`torneios/${S.tid}/comprovantes/${id}`), { uid: u.uid, img, em: Date.now() });
       await setDoc(R(`torneios/${S.tid}/inscricoes/${id}`), item);
       lsSet('minhas', [...lsGet('minhas', []), { id, tid: S.tid, cat: item.cat, j1: item.j1, j2: item.j2 }]);
       f.reset(); toast('Inscrição enviada. Aguarde a aprovação do organizador.'); render();

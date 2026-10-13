@@ -93,4 +93,25 @@ assert.ok(s2.sobra.every(a => a.pote === 1), 'sobram os do pote maior');
 assert.deepEqual(L.lerAtletas('1) Rafa\nTiago - 2\nAna (2)\nBia pote 1\nCarla'),
   [{ nome: 'Rafa', pote: null }, { nome: 'Tiago', pote: 2 }, { nome: 'Ana', pote: 2 }, { nome: 'Bia', pote: 1 }, { nome: 'Carla', pote: null }]);
 
+// Desempate manual: duas duplas com estatísticas iguais e sem confronto direto
+const dEmp = [{ id: 'x', cat: 'k', chave: 'A' }, { id: 'y', cat: 'k', chave: 'A' }];
+const tSem = L.tabela(dEmp, [], 'k', 'A');
+assert.ok(tSem.every(r => r.empate), 'empate detectado');
+assert.deepEqual(L.tabela(dEmp, [], 'k', 'A', ['y', 'x']).map(r => r.id), ['y', 'x'], 'ordem manual vale');
+assert.deepEqual(L.tabela(dEmp, [], 'k', 'A', ['x', 'y']).map(r => r.id), ['x', 'y']);
+
+// Melhor de 3 sets
+const cs = { pontos: 18, vantagem: true, finalSets: true, pontosSet: 18, pontosTie: 15 };
+assert.equal(L.jogoEmSets(cs, { fase: 'mata', rodadaNome: 'Final' }), true);
+assert.equal(L.jogoEmSets(cs, { fase: 'mata', rodadaNome: 'Semifinal' }), false);
+assert.equal(L.jogoEmSets({ ...cs, finalSets: false }, { fase: 'mata', rodadaNome: 'Final' }), false);
+assert.equal(L.regraDoSet(cs, 2).pontos, 15);
+assert.deepEqual(L.setsVencidos([[18, 15], [14, 18], [15, 10]]), { a: 2, b: 1 });
+assert.deepEqual(L.lerSets('18-15, 15x18; 15 10'), [[18, 15], [15, 18], [15, 10]]);
+assert.equal(L.validarSets(cs, L.lerSets('18-15, 15-18, 15-10')), null);
+assert.equal(L.validarSets(cs, L.lerSets('18-15, 18-12')), null);
+assert.match(L.validarSets(cs, L.lerSets('18-15')), /vencedor/);
+assert.match(L.validarSets(cs, L.lerSets('18-17, 18-12')), /1º set/);
+assert.match(L.validarSets(cs, L.lerSets('18-15, 18-12, 15-3')), /decidida/);
+
 console.log('Todos os testes passaram.');

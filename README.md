@@ -12,6 +12,13 @@ Sistema online para organizar torneios de futvôlei, do sorteio ao pódio.
 - **Inscrições online** com chave Pix para copiar e aprovação pelo organizador.
 - **Link público ao vivo** e **modo TV** para o telão, com patrocinadores.
 
+Funcionalidades opcionais (cada uma pode ser desligada em **Torneio > Funcionalidades** ou na categoria):
+
+- **Comprovante do Pix**: o atleta anexa a foto ou o print na inscrição e o organizador vê antes de aprovar. A imagem é comprimida no aparelho e guardada no banco gratuito.
+- **Final em melhor de 3 sets**: ligada por categoria, com pontos dos dois primeiros sets e do 3º set. O mesário fecha set a set.
+- **Desempate manual**: quando duas duplas empatam em vitórias, saldo e pontos, o organizador define a ordem com ▲ ▼ na classificação.
+- **Patrocinadores com logo e QR code**: cadastro por cota (master, ouro, prata, apoio), com frase e link. Aparecem no telão e no link público.
+
 O site fica hospedado de graça no **GitHub Pages**. Os dados ficam no **Firebase**, também no plano gratuito.
 
 ---

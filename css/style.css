@@ -188,3 +188,40 @@ tr.q td:first-child{box-shadow:inset 3px 0 0 var(--ok)}
 .setup ol{padding-left:20px;display:flex;flex-direction:column;gap:6px}
 
 td select{width:auto;max-width:140px;padding:5px 8px}
+
+/* sets da final */
+.setsbar{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;color:var(--board-dim);font-size:.9rem}
+.setsbar b{font-family:var(--f-display);font-size:1.7rem;color:var(--board-ink)}
+/* desempate manual */
+.mv{white-space:nowrap}
+.mv button{padding:2px 6px;font-size:.85rem}
+/* funcionalidades opcionais */
+.opcoes{border:1px solid var(--line);border-radius:8px;display:flex;flex-direction:column;gap:8px;padding:12px;margin:0}
+.opcoes legend{font-size:.8rem;font-weight:600;color:var(--muted);padding:0 4px}
+/* patrocinadores */
+.pats-admin{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:10px}
+.pat-item{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:8px}
+.pat-item img,.pat-noimg{width:64px;height:48px;object-fit:contain;background:#fff;border-radius:6px}
+.pat-noimg{display:grid;place-items:center;font-size:.7rem;color:#5a6d79;border:1px dashed var(--line)}
+.pats-strip{display:flex;flex-direction:column;gap:8px;align-items:center;padding-block:8px}
+.pats-strip .row{justify-content:center;gap:18px}
+.pats-strip a,.pats-strip span[title]{color:var(--ink);text-decoration:none}
+.pats-strip img{height:44px;width:auto;max-width:140px;object-fit:contain;background:#fff;border-radius:6px;padding:4px}
+.pats-strip b{font-family:var(--f-display);font-size:1.1rem}
+/* comprovante */
+.modal.foto .box{max-width:min(92vw,720px);max-height:92vh;align-items:center}
+.modal.foto img{max-height:75vh;max-width:100%;object-fit:contain;border-radius:8px;background:#fff}
+/* patrocinadores no telão */
+.tv .tvpats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:2vw}
+.tv .tvpat{background:#0f2230;border-radius:14px;padding:2vh 2vw;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1vh 2vw;align-items:center}
+.tv .tvpat .logo{grid-column:1;max-height:14vh;max-width:100%;object-fit:contain;background:#fff;border-radius:10px;padding:1vh;justify-self:start}
+.tv .tvpat .nome{grid-column:1;font-family:var(--f-display);font-size:clamp(1.6rem,3.4vw,3rem)}
+.tv .tvpat .tx{grid-column:1;display:flex;flex-direction:column;font-size:clamp(1rem,1.8vw,1.5rem)}
+.tv .tvpat .tx span{color:#8ea3af}
+.tv .tvpat .qrbox{grid-column:2;grid-row:1 / span 2;background:#fff;border-radius:10px;padding:6px}
+.tv .qr{width:clamp(90px,11vw,170px);height:auto;image-rendering:pixelated;display:block}
+.tv .tvpat.big{padding:4vh 4vw}
+.tv .tvpat.big .logo{max-height:34vh}
+.tv .tvpat.big .nome{font-size:clamp(2.4rem,6vw,5rem)}
+.tv .tvpat.big .qr{width:clamp(140px,18vw,280px)}
+.tv .tvpat.big .tx{font-size:clamp(1.3rem,2.6vw,2.4rem)}

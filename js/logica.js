@@ -14,8 +14,12 @@ export function fimValido(c, pa, pb) {
 }
 export const regraTxt = c => `Jogo até ${c.pontos}${c.vantagem ? ', com vantagem de 2' : ''}${+c.teto ? `, teto ${c.teto}` : ''}`;
 
-/** Tabela de uma chave: vitórias, saldo, pontos feitos e confronto direto. */
-export function tabela(duplas, jogos, cid, chave) {
+/**
+ * Tabela de uma chave: vitórias, saldo, pontos feitos, depois desempate manual
+ * do organizador (se houver) e, por fim, confronto direto.
+ * `manual` é uma lista de ids na ordem definida pelo organizador para duplas empatadas.
+ */
+export function tabela(duplas, jogos, cid, chave, manual = null) {
   const row = {};
   duplas.filter(d => d.cat === cid && d.chave === chave).forEach(d => row[d.id] = { id: d.id, j: 0, v: 0, d: 0, pp: 0, pc: 0 });
   const js = jogos.filter(j => j.cat === cid && j.fase === 'grupo' && j.chave === chave && j.status === 'fim');
@@ -26,14 +30,17 @@ export function tabela(duplas, jogos, cid, chave) {
   });
   const arr = Object.values(row); arr.forEach(r => r.sg = r.pp - r.pc);
   const h2h = (x, y) => { const g = js.find(j => (j.a === x.id && j.b === y.id) || (j.a === y.id && j.b === x.id)); if (!g) return 0; return ((g.a === x.id) === (g.pa > g.pb)) ? -1 : 1; };
-  arr.sort((x, y) => y.v - x.v || y.sg - x.sg || y.pp - x.pp || h2h(x, y));
+  const mi = id => manual ? manual.indexOf(id) : -1;
+  const man = (x, y) => (mi(x.id) >= 0 && mi(y.id) >= 0) ? mi(x.id) - mi(y.id) : 0;
+  arr.sort((x, y) => y.v - x.v || y.sg - x.sg || y.pp - x.pp || man(x, y) || h2h(x, y));
+  arr.forEach((r, i) => { r.empate = arr.some((o, k) => k !== i && o.v === r.v && o.sg === r.sg && o.pp === r.pp); });
   return arr;
 }
 export const chavesCat = (duplas, cid) => [...new Set(duplas.filter(d => d.cat === cid && d.chave).map(d => d.chave))].sort();
 
 /** Duplas classificadas para o mata-mata, da melhor para a pior. */
-export function classificados(c, duplas, jogos) {
-  const tabs = chavesCat(duplas, c.id).map(ch => tabela(duplas, jogos, c.id, ch));
+export function classificados(c, duplas, jogos, manuais = {}) {
+  const tabs = chavesCat(duplas, c.id).map(ch => tabela(duplas, jogos, c.id, ch, manuais[c.id + '|' + ch] || null));
   const cmp = (x, y) => y.v - x.v || y.sg - x.sg || y.pp - x.pp;
   const seeds = [];
   for (let p = 0; p < (+c.classificam || 1); p++) seeds.push(...tabs.map(tb => tb[p]).filter(Boolean).sort(cmp).map(r => r.id));
@@ -97,11 +104,11 @@ export function montarMata(c, seeds, ci, uid) {
 }
 
 /** [campeã, vice, 3º, (outro 3º)] ou null se a categoria não terminou. */
-export function podio(c, duplas, jogos) {
+export function podio(c, duplas, jogos, manuais = {}) {
   if (c.formato === 'todos') {
     const js = jogos.filter(j => j.cat === c.id && j.status !== 'bye');
     if (!js.length || js.some(j => j.status !== 'fim')) return null;
-    return tabela(duplas, jogos, c.id, 'A').slice(0, 3).map(r => r.id);
+    return tabela(duplas, jogos, c.id, 'A', manuais[c.id + '|A'] || null).slice(0, 3).map(r => r.id);
   }
   const fin = jogos.find(j => j.cat === c.id && j.fase === 'mata' && j.rodadaNome === 'Final');
   if (!fin || fin.status !== 'fim') return null;
@@ -149,4 +156,34 @@ export function lerLista(texto) {
   return String(texto).split('\n').map(l => l.replace(/^\s*\d+[\).\-\s]*/, '').trim()).filter(Boolean)
     .map(l => { const p = l.split(/\s*(?:\/|\s+e\s+|\s+&\s+|\s+x\s+|,)\s*/i).filter(Boolean); return p.length >= 2 ? [p[0], p.slice(1).join(' ')] : null; })
     .filter(Boolean);
+}
+
+/* ---------- Final em melhor de 3 sets ---------- */
+
+/** A final desta categoria é disputada em sets? */
+export const jogoEmSets = (c, j) => !!(c && c.finalSets && j && j.fase === 'mata' && j.rodadaNome === 'Final');
+
+/** Regra de pontos do set número `idx` (0, 1 ou 2). O 3º set tem pontuação própria. */
+export const regraDoSet = (c, idx) => ({ ...c, pontos: idx < 2 ? (+c.pontosSet || +c.pontos || 18) : (+c.pontosTie || 15), teto: 0 });
+
+/** Sets vencidos por cada lado: { a, b }. */
+export const setsVencidos = sets => (sets || []).reduce((o, [x, y]) => (x > y ? o.a++ : o.b++, o), { a: 0, b: 0 });
+
+/** Lê placar de sets digitado: "18-15, 15-18, 15-10" → [[18,15],[15,18],[15,10]]. */
+export function lerSets(texto) {
+  return String(texto).split(/[,;\n]+/).map(p => p.trim()).filter(Boolean)
+    .map(p => p.match(/^(\d+)\s*[x×\-:\/ ]\s*(\d+)$/i)).map(m => m ? [+m[1], +m[2]] : null);
+}
+
+/** Valida uma sequência de sets de uma melhor de 3. Retorna mensagem de erro ou null. */
+export function validarSets(c, sets) {
+  if (!sets.length || sets.some(x => !x)) return 'Use o formato 18-15, 15-18, 15-10.';
+  let a = 0, b = 0;
+  for (let i = 0; i < sets.length; i++) {
+    if (a === 2 || b === 2) return 'Há sets depois de a partida já estar decidida.';
+    const [x, y] = sets[i];
+    if (!fimValido(regraDoSet(c, i), x, y)) return `O ${i + 1}º set (${x}-${y}) não fecha pela regra.`;
+    x > y ? a++ : b++;
+  }
+  return (a === 2 || b === 2) ? null : 'A partida ainda não tem vencedor (precisa de 2 sets).';
 }

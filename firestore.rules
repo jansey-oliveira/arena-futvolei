@@ -44,7 +44,7 @@ service cloud.firestore {
         allow update: if isAdmin()
           || (isMesario()
               && request.resource.data.diff(resource.data).affectedKeys()
-                   .hasOnly(['pa', 'pb', 'status', 'quadra', 'inicio', 'fim', 'vencedor', 'a', 'b']));
+                   .hasOnly(['pa', 'pb', 'status', 'quadra', 'inicio', 'fim', 'vencedor', 'a', 'b', 'sets']));
       }
 
       // Guarda o código secreto do link de mesário.
@@ -65,13 +65,29 @@ service cloud.firestore {
       match /inscricoes/{iid} {
         allow read, update, delete: if isAdmin();
         allow create: if request.auth != null
-          && request.resource.data.keys().hasOnly(['cat', 'j1', 'j2', 'zap', 'status', 'em', 'uid'])
+          && request.resource.data.keys().hasOnly(['cat', 'j1', 'j2', 'zap', 'status', 'em', 'uid', 'comprovante'])
           && request.resource.data.status == 'pendente'
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.cat is string && request.resource.data.cat.size() <= 40
           && request.resource.data.j1 is string && request.resource.data.j1.size() <= 60
           && request.resource.data.j2 is string && request.resource.data.j2.size() <= 60
           && request.resource.data.zap is string && request.resource.data.zap.size() <= 30;
+      }
+
+      // Foto do comprovante do Pix (só o organizador vê).
+      match /comprovantes/{iid} {
+        allow read, delete: if isAdmin();
+        allow create: if request.auth != null
+          && request.resource.data.keys().hasOnly(['uid', 'img', 'em'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.img is string
+          && request.resource.data.img.size() < 900000;
+      }
+
+      // Patrocinadores (logo, frase e link do QR code), visíveis a todos.
+      match /patrocinadores/{pid} {
+        allow read: if true;
+        allow write: if isAdmin();
       }
     }
   }
