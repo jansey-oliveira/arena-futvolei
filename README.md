@@ -66,7 +66,7 @@ Você só faz isso uma vez. Use o mesmo e-mail do Google em todos os passos.
 3. ID do documento: **o seu e-mail do Google, todo em letras minúsculas** (exemplo: `maria@gmail.com`).
 4. Adicione um campo `nome` do tipo string, com seu nome, e salve.
 
-Para ter mais organizadores, crie outro documento na coleção `admins` com o e-mail da pessoa.
+Quem está na coleção `admins` é **administrador**: cria, apaga e organiza todos os torneios. Para dar acesso a alguém só em um torneio, use a seção **Organizadores deste torneio** (veja abaixo), sem mexer no Firebase.
 
 ### 7. Conectar o site ao Firebase
 
@@ -87,6 +87,16 @@ Esses valores não são senhas. Quem protege os dados são as regras do passo 4.
 4. Em 1 ou 2 minutos o site estará em: **https://jansey-oliveira.github.io/arena-futvolei/**
 
 ---
+
+## Administradores e organizadores
+
+- **Administrador**: e-mail cadastrado na coleção `admins` do Firebase (passo 6). Cria e apaga torneios e organiza todos eles.
+- **Organizador do torneio**: na aba **Torneio**, seção **Organizadores deste torneio**, digite o e-mail Google da pessoa e clique em **Adicionar organizador**. Ela entra pelo botão **Organizador** e edita só aquele torneio: categorias, duplas, jogos, inscrições, identidade visual e patrocinadores. Não pode criar nem apagar torneios.
+- Cada organizador também pode adicionar e remover outros organizadores do mesmo torneio, ou sair da organização.
+- Ao entrar, o organizador é levado direto para o torneio dele. Nos demais torneios ele vê só a parte pública.
+- **Mesário** continua sem cadastro: basta o link de mesário do Painel.
+
+Isso permite vender o sistema para vários campeonatos na mesma instalação: você (administrador) cria o torneio e adiciona o e-mail do cliente como organizador.
 
 ## Identidade visual (white-label)
 

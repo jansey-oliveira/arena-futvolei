@@ -18,7 +18,7 @@ const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } ca
 
 const params = new URLSearchParams(location.search);
 const S = {
-  boot: 'carregando', user: null, org: false, mesario: false, torneios: [], tid: params.get('t') || lsGet('tid'),
+  boot: 'carregando', user: null, admin: false, org: false, orgDe: {}, orgs: [], mesario: false, torneios: [], tid: params.get('t') || lsGet('tid'),
   jogos: [], insc: [], privado: null, pats: [], foto: null, tab: 'painel', cat: null, quadra: lsGet('quadra'), editJogo: null, editCat: null,
   modal: null, tv: false, tvIdx: 0, pend: false, novoT: false
 };
@@ -204,10 +204,10 @@ async function chamar(quadra) {
 
 const novaCat = () => ({ id: uid(), nome: 'Nova categoria', formato: 'grupos', chaves: 2, classificam: 2, extras: 0, pontos: 18, vantagem: true, teto: 0, terceiro: true, vagas: 16, valor: 80, cobranca: 'dupla', quadras: [], modoDuplas: 'fixas', potes: false, finalSets: false, pontosSet: 18, pontosTie: 15 });
 function trocarTorneio(id) {
-  S.tid = id; lsSet('tid', id); S.cat = null; S.rascunho = null; S.editJogo = S.editCat = null; S.mesario = false;
+  S.tid = id; lsSet('tid', id); S.cat = null; S.rascunho = null; S.editJogo = S.editCat = null; S.mesario = false; S.org = podeOrganizar(id);
   const u = new URL(location.href); if (id) u.searchParams.set('t', id); else u.searchParams.delete('t'); u.searchParams.delete('m');
   history.replaceState(null, '', u.pathname + u.search + u.hash);
-  assinarTorneio(); verificarMesario();
+  assinarTorneio(); verificarMesario(); verificarOrgs();
 }
 async function criarTorneio(d) {
   const id = uid();
@@ -247,7 +247,8 @@ async function apagarTorneio() {
   const mes = await getDocs(C(`torneios/${id}/mesarios`)).catch(() => null);
   const comp = await getDocs(C(`torneios/${id}/comprovantes`)).catch(() => null);
   const pat = await getDocs(C(`torneios/${id}/patrocinadores`)).catch(() => null);
-  await lote([...apagarJogosOps(), ...[ins, mes, comp, pat].flatMap(q => (q?.docs || []).map(d => [d.ref.path, null])), [`torneios/${id}/privado/config`, null], ['torneios/' + id, null]]);
+  const orgs = await getDocs(C(`torneios/${id}/organizadores`)).catch(() => null);
+  await lote([...apagarJogosOps(), ...[ins, mes, comp, pat, orgs].flatMap(q => (q?.docs || []).map(d => [d.ref.path, null])), [`torneios/${id}/privado/config`, null], ['torneios/' + id, null]]);
   S.torneios = S.torneios.filter(x => x.id !== id);
   trocarTorneio(S.torneios[0]?.id || null); S.tab = 'painel'; render(); toast('Torneio apagado.');
 }
@@ -271,14 +272,20 @@ async function decidirInsc(id, status) {
 /* ---------- assinaturas em tempo real ---------- */
 function assinarTorneio() {
   Object.keys(unsubs).forEach(k => { unsubs[k]?.(); unsubs[k] = null; });
-  S.jogos = []; S.insc = []; S.privado = null; S.pats = [];
-  if (!S.tid || !db) return;
+  S.jogos = []; S.pats = [];
+  if (!S.tid || !db) { assinarPrivado(); return; }
   unsubs.jogos = onSnapshot(C(`torneios/${S.tid}/jogos`), s => { S.jogos = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, erro);
   unsubs.pats = onSnapshot(C(`torneios/${S.tid}/patrocinadores`), s => { S.pats = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, () => { S.pats = []; });
-  if (S.org) {
-    unsubs.insc = onSnapshot(C(`torneios/${S.tid}/inscricoes`), s => { S.insc = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.em - a.em); render(); }, erro);
-    unsubs.priv = onSnapshot(R(`torneios/${S.tid}/privado/config`), s => { S.privado = s.exists() ? s.data() : null; render(); }, erro);
-  }
+  assinarPrivado();
+}
+// Dados só do organizador: inscrições, link de mesário e lista de organizadores.
+function assinarPrivado() {
+  ['insc', 'priv', 'orgs'].forEach(k => { unsubs[k]?.(); unsubs[k] = null; });
+  S.insc = []; S.privado = null; S.orgs = [];
+  if (!S.tid || !db || !S.org) return;
+  unsubs.insc = onSnapshot(C(`torneios/${S.tid}/inscricoes`), s => { S.insc = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.em - a.em); render(); }, erro);
+  unsubs.priv = onSnapshot(R(`torneios/${S.tid}/privado/config`), s => { S.privado = s.exists() ? s.data() : null; render(); }, erro);
+  unsubs.orgs = onSnapshot(C(`torneios/${S.tid}/organizadores`), s => { S.orgs = s.docs.map(d => ({ email: d.id, ...d.data() })).sort((a, b) => (a.em || 0) - (b.em || 0)); render(); }, () => { S.orgs = []; });
 }
 let mesarioEmCurso = null;
 function verificarMesario() { mesarioEmCurso = mesarioEmCurso || _verificarMesario().finally(() => { mesarioEmCurso = null; }); return mesarioEmCurso; }
@@ -301,9 +308,54 @@ async function _verificarMesario() {
   } catch (e) { if (m) toast('Este link de mesário não vale mais. Peça um novo ao organizador.'); }
   render();
 }
+/* ---------- organizadores ----------
+   Administrador: e-mail na coleção "admins". Cria, apaga e organiza todos os torneios.
+   Organizador do torneio: e-mail em torneios/{id}/organizadores. Organiza só aquele torneio. */
+const meuEmail = () => (S.user && !S.user.isAnonymous && S.user.email ? S.user.email.toLowerCase() : '');
+const podeOrganizar = tid => !!(S.admin || (tid && S.orgDe[tid]));
 async function verificarAdmin(u) {
-  S.org = false;
-  if (u && !u.isAnonymous && u.email) { try { S.org = (await getDoc(R('admins/' + u.email))).exists(); } catch { S.org = false; } }
+  S.admin = false; S.orgDe = {};
+  const em = meuEmail();
+  if (em) { try { S.admin = (await getDoc(R('admins/' + em))).exists(); } catch { S.admin = false; } }
+  S.org = podeOrganizar(S.tid);
+  if (em && !S.admin) await verificarOrgs();
+  else aposLogin();
+}
+// Confere em quais torneios o e-mail logado é organizador (uma leitura por torneio, só uma vez).
+// As verificações rodam em fila para nunca decidir com resultados pela metade.
+let filaOrgs = Promise.resolve();
+function verificarOrgs() { filaOrgs = filaOrgs.then(_verificarOrgs, _verificarOrgs); return filaOrgs; }
+async function _verificarOrgs() {
+  const em = meuEmail();
+  if (!em || S.admin || !db) return;
+  const falta = S.torneios.map(x => x.id).filter(id => !(id in S.orgDe));
+  if (falta.length) {
+    const res = await Promise.all(falta.map(id => getDoc(R(`torneios/${id}/organizadores/${em}`)).then(s => s.exists(), () => false)));
+    if (meuEmail() !== em) return;
+    falta.forEach((id, i) => S.orgDe[id] = res[i]);
+    const antes = S.org; S.org = podeOrganizar(S.tid);
+    if (S.org !== antes) { assinarPrivado(); render(); }
+  }
+  aposLogin();
+}
+// Ao abrir o site (sem link de torneio) ou logo depois de entrar: leva o organizador para um torneio dele.
+let avisarLogin = false, levarAoMeu = !params.get('t');
+function aposLogin() {
+  if (!meuEmail() || S.boot !== 'ok' || !(avisarLogin || levarAoMeu)) return;
+  const avisar = avisarLogin; avisarLogin = levarAoMeu = false;
+  if (S.admin || S.org) return;
+  const m = meusTorneios();
+  if (m.length && S.tid === params.get('t')) { if (avisar) toast('Você não organiza este torneio. Os seus estão no seletor do topo.'); }
+  else if (m.length) { trocarTorneio(m[0].id); render(); if (avisar) toast(m.length > 1 ? `Você organiza ${m.length} torneios. Troque no seletor do topo.` : 'Você é organizador deste torneio.'); }
+  else if (avisar) toast('Este e-mail não organiza nenhum torneio. Peça para um organizador adicionar você na aba Torneio.');
+}
+const meusTorneios = () => S.torneios.filter(x => S.orgDe[x.id]);
+async function addOrg(email, nome) {
+  email = String(email || '').trim().toLowerCase();
+  if (!/^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/.test(email)) return toast('Digite um e-mail válido.');
+  if (S.orgs.some(o => o.email === email)) return toast('Este e-mail já organiza o torneio.');
+  await setD(`torneios/${S.tid}/organizadores/${email}`, { nome: String(nome || '').trim().slice(0, 60), em: Date.now(), por: meuEmail() });
+  toast('Organizador adicionado. Ele entra pelo botão Organizador com esse e-mail Google.');
 }
 
 /* ---------- render ---------- */
@@ -324,7 +376,7 @@ function renderChrome() {
   MK.aplicar(m, { titulo: T()?.nome });
   $('#topbar').innerHTML = `<div class="brand">${logoHTML(m, '38px', 'var(--accent-board)')}<div class="nm"><b>${esc(m.nome)}</b>${m.sub ? `<span>${esc(m.sub)}</span>` : ''}</div></div>
     ${S.torneios.length ? `<select id="selT" aria-label="Torneio">${S.torneios.map(x => `<option value="${x.id}"${x.id === S.tid ? ' selected' : ''}>${esc(x.d.nome)}${x.d.data ? ' · ' + dataBR(x.d.data) : ''}</option>`).join('')}</select>` : '<span style="flex:1"></span>'}
-    <span class="role">${S.org ? 'Organizador' : S.mesario ? 'Mesário' : 'Público'}</span>
+    <span class="role">${S.admin ? 'Administrador' : S.org ? 'Organizador' : S.mesario ? 'Mesário' : 'Público'}</span>
     ${configurado ? `<div class="auth">${logado ? `<button data-act="sair" title="${esc(S.user.email || '')}">Sair</button>` : `<button data-act="entrar">Organizador</button>`}</div>` : ''}`;
   $('#rodape').innerHTML = `<div class="rodape"><span>${esc(T()?.nome || m.nome)}${m.sub ? ' · ' + esc(m.sub) : ''}</span>${m.lema ? `<span>${esc(m.lema)}</span>` : ''}</div>`;
   $('#tabs').innerHTML = T() ? tabsList().map(([k, l]) => `<button data-act="tab" data-k="${k}" aria-current="${S.tab === k}">${l}</button>`).join('') : '';
@@ -351,8 +403,8 @@ function setupHTML() {
   <p class="small muted" style="margin:0">O passo a passo completo está no arquivo README.md do repositório.</p></div>`;
 }
 function emptyHTML() {
-  if (!S.org) return `<div class="empty">${logoHTML(marca(), '160px')}<h2>Nenhum torneio publicado ainda</h2><p class="muted">Quando o organizador criar um torneio, as chaves, os jogos e os placares aparecem aqui ao vivo.</p>
-    ${S.user && !S.user.isAnonymous ? `<p class="small muted">Você entrou como ${esc(S.user.email)}, mas este e-mail não está cadastrado como organizador (passo 6 do guia).</p>` : ''}</div>`;
+  if (!S.admin) return `<div class="empty">${logoHTML(marca(), '160px')}<h2>Nenhum torneio publicado ainda</h2><p class="muted">Quando o organizador criar um torneio, as chaves, os jogos e os placares aparecem aqui ao vivo.</p>
+    ${S.user && !S.user.isAnonymous ? `<p class="small muted">Você entrou como ${esc(S.user.email)}. Só administradores criam torneios. Quando um torneio adicionar você como organizador, ele aparece aqui.</p>` : ''}</div>`;
   return `<div class="empty">${logoHTML(marca(), '160px')}<h2>Monte seu primeiro torneio</h2>
   <p class="muted">Crie o torneio, cadastre as categorias e as duplas, sorteie as chaves e acompanhe os placares até o pódio. Para conhecer o sistema, gere um torneio de exemplo com duas categorias e jogos em andamento.</p>
   <div class="row" style="justify-content:center"><button class="btn" data-act="novoT">Criar torneio</button><button class="btn ghost" data-act="exemplo">Gerar torneio de exemplo</button></div></div>
@@ -410,7 +462,7 @@ function heroHTML(t) {
       <h1 class="tit">${esc(t.nome)}</h1>
       ${cats().length ? `<div class="bars">${cats().map(c => `<span style="${estCat(c)}"><i></i>${esc(c.nome)}</span>`).join('')}</div>` : ''}
       ${d ? `<div class="data"><b class="num">${d.dm}</b><span>${esc(d.semana)}<br><strong>${esc(d.mes)} ${d.ano}</strong></span></div>` : ''}
-      ${S.org ? `<div class="acoes"><button class="btn sm" data-act="tab" data-k="tv">Abrir modo TV</button><button class="btn ghost sm" data-act="novoT2">Novo torneio</button><button class="btn ghost sm" data-act="tab" data-k="marca">Identidade visual</button></div>` : ''}
+      ${S.org ? `<div class="acoes"><button class="btn sm" data-act="tab" data-k="tv">Abrir modo TV</button>${S.admin ? '<button class="btn ghost sm" data-act="novoT2">Novo torneio</button>' : ''}<button class="btn ghost sm" data-act="tab" data-k="marca">Identidade visual</button></div>` : ''}
     </div>
     <div class="emb" aria-hidden="true">${logoHTML(m, '360px')}</div>
     ${m.lema ? `<div class="lema">${esc(m.lema)}</div>` : ''}
@@ -421,7 +473,7 @@ function painel() {
   const tot = S.jogos.filter(j => j.status !== 'bye'), fin = tot.filter(j => j.status === 'fim').length;
   return `<div class="stack">
   ${heroHTML(t)}
-  ${S.org && S.novoT ? novoTForm() : ''}
+  ${S.admin && S.novoT ? novoTForm() : ''}
   <div class="panel stats"><div class="stat"><b class="num">${cats().length}</b><span class="label">categorias</span></div><div class="stat"><b class="num">${duplas().length}</b><span class="label">duplas</span></div><div class="stat"><b class="num">${fin}/${tot.length}</b><span class="label">jogos encerrados</span></div><div class="stat"><b class="num">${ao.length}/${(t.quadras || []).length}</b><span class="label">quadras em jogo</span></div></div>
   <div class="grid2">
     <section class="panel"><h3>Em quadra agora</h3><div class="games">${ao.length ? ao.sort((a, b) => (a.quadra || '').localeCompare(b.quadra || '')).map(j => gameRow(j)).join('') : '<p class="muted">Nenhum jogo em andamento.</p>'}</div></section>
@@ -445,7 +497,7 @@ function patsFaixa() {
 
 function config() {
   const t = T();
-  return `<div class="stack"><div class="sect-head"><h2>Dados do torneio</h2><button class="btn danger sm" data-act="apagarT">Apagar torneio</button></div>
+  return `<div class="stack"><div class="sect-head"><h2>Dados do torneio</h2>${S.admin ? '<button class="btn danger sm" data-act="apagarT">Apagar torneio</button>' : ''}</div>
   <form class="panel form" data-form="config">
     <label class="field full"><span>Nome</span><input id="c-nome" name="nome" type="text" value="${esc(t.nome)}" required></label>
     <label class="field"><span>Data</span><input id="c-data" name="data" type="date" value="${esc(t.data)}"></label>
@@ -464,7 +516,22 @@ function config() {
     </fieldset>
     <div class="full"><button class="btn">Salvar torneio</button></div>
   </form>
+  ${orgsAdmin()}
   ${patsAdmin()}</div>`;
+}
+function orgsAdmin() {
+  const eu = meuEmail();
+  const item = o => `<div class="org-item"><span class="org-av" aria-hidden="true">${esc((o.nome || o.email).trim().charAt(0).toUpperCase())}</span><div style="min-width:0"><b style="overflow-wrap:anywhere">${esc(o.nome || o.email)}</b>${o.email === eu ? ' <span class="chip">você</span>' : ''}${o.nome ? `<div class="small muted" style="overflow-wrap:anywhere">${esc(o.email)}</div>` : ''}</div>
+    <button class="link small" data-act="delOrg" data-id="${esc(o.email)}">${o.email === eu ? 'Sair da organização' : 'Remover'}</button></div>`;
+  return `<section class="panel stack" style="gap:14px"><div><h3>Organizadores deste torneio</h3>
+    <p class="small muted" style="margin:0">Quem estiver aqui entra pelo botão <b>Organizador</b> com o e-mail Google e pode editar só este torneio: categorias, duplas, jogos, inscrições, identidade visual e patrocinadores. Criar e apagar torneios continua só com os administradores.</p></div>
+    ${S.orgs.length ? `<div class="orgs">${S.orgs.map(item).join('')}</div>` : `<p class="muted" style="margin:0">${S.admin ? 'Só os administradores organizam este torneio por enquanto.' : 'Nenhum organizador cadastrado.'}</p>`}
+    <form class="form" data-form="org">
+      <label class="field"><span>E-mail Google da pessoa</span><input id="og-email" name="email" type="email" maxlength="80" required placeholder="nome@gmail.com" autocomplete="off"></label>
+      <label class="field"><span>Nome (opcional)</span><input id="og-nome" name="nome" type="text" maxlength="60"></label>
+      <div class="full"><button class="btn">Adicionar organizador</button></div>
+    </form>
+    <p class="dica" style="margin:0">Depois de adicionar, envie o link público do torneio para a pessoa. Mesários não precisam ser organizadores: use o link de mesário do Painel.</p></section>`;
 }
 function patsAdmin() {
   const lista = patsOrdem();
@@ -999,7 +1066,7 @@ async function copiar(txt) {
 const jogoAoVivo = () => S.jogos.find(x => x.status === 'aovivo' && x.quadra === S.quadra);
 const ACT = {
   tab: d => { if (d.k === 'tv') { abrirTV(); return; } S.inscOk = null; if (S.tab === 'marca' && d.k !== 'marca') S.rascunho = null; S.tab = d.k; S.editJogo = null; S.editCat = null; history.replaceState(null, '', location.pathname + location.search + (d.k === 'painel' ? '' : '#' + d.k)); render(); window.scrollTo(0, 0); },
-  entrar: async () => { const p = new GoogleAuthProvider(); try { await signInWithPopup(auth, p); } catch (e) { if (String(e.code).includes('popup-blocked')) await signInWithRedirect(auth, p); else erro(e); } },
+  entrar: async () => { avisarLogin = true; const p = new GoogleAuthProvider(); try { await signInWithPopup(auth, p); } catch (e) { if (String(e.code).includes('popup-blocked')) await signInWithRedirect(auth, p); else erro(e); } },
   sair: () => signOut(auth).then(() => toast('Você saiu.')),
   novoT: () => { S.novoT = true; render(); }, novoT2: () => { S.novoT = !S.novoT; render(); }, cancelNovo: () => { S.novoT = false; render(); },
   exemplo: () => criarExemplo().catch(erro),
@@ -1064,6 +1131,13 @@ const ACT = {
     try { const s = await getDoc(R(`torneios/${S.tid}/comprovantes/${d.id}`)); if (!s.exists()) return toast('Comprovante não encontrado.'); S.foto = s.data().img; renderModal(); } catch (e) { erro(e); }
   },
   fecharFoto: () => { S.foto = null; renderModal(); },
+  delOrg: d => {
+    const eu = d.id === meuEmail();
+    confirmar(eu ? 'Sair da organização deste torneio? Você perde o acesso de organizador a ele.' : `Remover ${d.id} da organização deste torneio?`, eu ? 'Sair' : 'Remover', () => delD(`torneios/${S.tid}/organizadores/${d.id}`).then(() => {
+      if (eu && !S.admin) { S.orgDe[S.tid] = false; S.org = false; assinarPrivado(); S.tab = 'painel'; render(); }
+      toast(eu ? 'Você saiu da organização deste torneio.' : 'Organizador removido.');
+    }).catch(erro));
+  },
   delPat: d => confirmar('Remover este patrocinador?', 'Remover', () => delD(`torneios/${S.tid}/patrocinadores/${d.id}`)),
   desempate: d => {
     const key = d.c + '|' + d.ch, tb = tabela(d.c, d.ch).map(r => r.id), i = +d.i, k = i + (+d.dir);
@@ -1115,6 +1189,7 @@ const FORM = {
     if (!novas.length) return toast('Nenhuma dupla reconhecida. Use o formato Atleta / Atleta.');
     saveT({ duplas: [...duplas(), ...novas] }).then(() => toast(`${novas.length} duplas importadas.`)); f.reset();
   },
+  org: (fd, f) => { addOrg(fd.get('email'), fd.get('nome')).then(() => f.reset()).catch(erro); },
   pat: async (fd, f) => {
     const o = Object.fromEntries(fd); const nome = String(o.nome || '').trim().slice(0, 60); if (!nome) return;
     let logo = null; const file = fd.get('logo');
@@ -1185,7 +1260,7 @@ function init() {
   onSnapshot(C('torneios'), snap => {
     S.torneios = snap.docs.map(d => ({ id: d.id, d: d.data() })).sort((a, b) => (b.d.data || '').localeCompare(a.d.data || '') || (b.d.criado || 0) - (a.d.criado || 0));
     if (!S.tid || !S.torneios.some(x => x.id === S.tid)) trocarTorneio(S.torneios[0]?.id || null);
-    S.boot = 'ok'; render();
+    S.boot = 'ok'; render(); verificarOrgs();
     if (primeiraVez && h === 'tv' && S.tid) abrirTV();
     primeiraVez = false;
   }, e => { console.error(e); S.boot = 'erro'; render(); });
