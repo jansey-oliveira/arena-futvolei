@@ -24,7 +24,7 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/admins/$(request.auth.token.email));
     }
 
-    // Lista de organizadores: só se cria pelo Console do Firebase.
+    // Lista de administradores: só se cria pelo Console do Firebase.
     match /admins/{email} {
       allow read: if request.auth != null && request.auth.token.email == email;
       allow write: if false;
