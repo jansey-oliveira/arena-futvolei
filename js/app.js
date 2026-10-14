@@ -378,7 +378,7 @@ function renderChrome() {
     ${S.torneios.length ? `<select id="selT" aria-label="Torneio">${S.torneios.map(x => `<option value="${x.id}"${x.id === S.tid ? ' selected' : ''}>${esc(x.d.nome)}${x.d.data ? ' · ' + dataBR(x.d.data) : ''}</option>`).join('')}</select>` : '<span style="flex:1"></span>'}
     <span class="role">${S.admin ? 'Administrador' : S.org ? 'Organizador' : S.mesario ? 'Mesário' : 'Público'}</span>
     ${configurado ? `<div class="auth">${logado ? `<button data-act="sair" title="${esc(S.user.email || '')}">Sair</button>` : `<button data-act="entrar">Organizador</button>`}</div>` : ''}`;
-  $('#rodape').innerHTML = `<div class="rodape"><span>${esc(T()?.nome || m.nome)}${m.sub ? ' · ' + esc(m.sub) : ''}</span>${m.lema ? `<span>${esc(m.lema)}</span>` : ''}</div>`;
+  $('#rodape').innerHTML = `<div class="rodape"><span>${esc(T()?.nome || m.nome)}${m.sub ? ' · ' + esc(m.sub) : ''}</span>${m.lema ? `<span>${esc(m.lema)}</span>` : ''}<a href="conheca.html">Conheça o sistema e os planos</a></div>`;
   $('#tabs').innerHTML = T() ? tabsList().map(([k, l]) => `<button data-act="tab" data-k="${k}" aria-current="${S.tab === k}">${l}</button>`).join('') : '';
 }
 function render() {

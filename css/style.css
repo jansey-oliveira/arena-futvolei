@@ -279,6 +279,7 @@ td select{width:auto;max-width:140px;padding:5px 8px}
 .pats-strip img{height:44px;width:auto;max-width:140px;object-fit:contain;background:#fff;border-radius:var(--r-sm);padding:4px}
 .pats-strip b{font-family:var(--f-display);font-weight:var(--f-display-w);font-size:1.3rem;letter-spacing:.04em}
 .rodape{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:40px;padding-top:14px;font-size:.6rem;letter-spacing:.32em;text-transform:uppercase;color:var(--muted)}
+.rodape a{color:var(--accent-txt);text-decoration:none}.rodape a:hover{text-decoration:underline}
 
 /* ---------- identidade visual (editor) ---------- */
 .mk{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,360px);gap:20px;align-items:start}
