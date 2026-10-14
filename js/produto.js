@@ -5,7 +5,7 @@ export const PRODUTO = {
   nome: '100 Compromisso',
   sub: 'Torneios de futvôlei',
   // WhatsApp de vendas só com números, com DDI e DDD. Ex.: '5511999998888'. Vazio = botão abre o e-mail.
-  whatsapp: '',
+  whatsapp: '5511925365778',
   email: '',
   instagram: '', // sem @
   manual: 'docs/manual-de-uso.pdf',
