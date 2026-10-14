@@ -2,8 +2,9 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, onAuthStateChanged, signInAnonymously, signInWithPopup, signInWithRedirect, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, doc, collection, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc, getDocs, writeBatch, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-import { firebaseConfig, nomeDoSite } from './config.js';
+import { firebaseConfig, marcaPadrao } from './config.js';
 import * as L from './logica.js';
+import * as MK from './marca.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -77,6 +78,26 @@ const sorteadas = c => c?.modoDuplas === 'sorteadas';
 const nomeInsc = i => i.j2 ? `${i.j1} / ${i.j2}` : i.j1;
 const dn = id => { const d = dupla(id); return d ? `${d.j1} / ${d.j2}` : (id ? '—' : 'A definir'); };
 const jogosCat = cid => S.jogos.filter(j => j.cat === cid && j.status !== 'bye');
+/* ---------- identidade visual ---------- */
+const marca = () => MK.completar(S.tab === 'marca' && S.rascunho ? S.rascunho : (T()?.marca || marcaPadrao), MK.completar(marcaPadrao));
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+const partesData = d => { if (!d) return null; const [y, m, dd] = d.split('-').map(Number); const dt = new Date(y, m - 1, dd); return { dm: `${String(dd).padStart(2, '0')}.${String(m).padStart(2, '0')}`, semana: SEMANA[dt.getDay()], mes: MESES[m - 1], ano: y }; };
+/** Cor de uma categoria: a escolhida pelo organizador ou, se não houver, a da paleta da marca pela ordem. */
+function corCat(c, onde = 'fundo') {
+  const m = marca(); if (!c) return MK.corCategoria(m, m.cores.destaque, onde);
+  const i = Math.max(0, cats().findIndex(x => x.id === c.id));
+  return MK.corCategoria(m, c.cor || m.paleta[i % m.paleta.length]?.cor || m.cores.destaque, onde);
+}
+const estCat = (c, onde) => { const k = corCat(c, onde); return `--cat:${k};--cat-ink:${MK.tintaSobre(k)}`; };
+/** Logo da marca. Logos "de uma cor só" são pintados com a cor indicada (como nos uniformes). */
+function logoHTML(m, tam = '36px', cor = '') {
+  if (!m.logo) return `<span class="logo-txt" style="--s:${tam};${cor ? '--c:' + cor : ''}" aria-hidden="true">${esc((m.nome || '?').trim().split(/\s+/).map(p => p[0]).join('').slice(0, 3).toUpperCase())}</span>`;
+  // url() dentro de variável CSS resolve a partir do arquivo .css, então o endereço precisa ser absoluto
+  const src = m.logo.startsWith('data:') ? m.logo : new URL(m.logo, location.href).href;
+  if (m.logoTinta) return `<span class="logo-m" role="img" aria-label="${esc(m.nome)}" style="--s:${tam};--logo:url('${src}');${cor ? '--c:' + cor : ''}"></span>`;
+  return `<img class="logo-i" src="${m.logo}" alt="${esc(m.nome)}" style="--s:${tam}">`;
+}
 const opt = k => T()?.opcoes?.[k] !== false; // funcionalidades opcionais: ligadas por padrão
 const manuais = () => opt('desempate') ? (T()?.desempate || {}) : {};
 const tabela = (cid, ch) => L.tabela(duplas(), S.jogos, cid, ch, manuais()[cid + '|' + ch] || null);
@@ -183,7 +204,7 @@ async function chamar(quadra) {
 
 const novaCat = () => ({ id: uid(), nome: 'Nova categoria', formato: 'grupos', chaves: 2, classificam: 2, extras: 0, pontos: 18, vantagem: true, teto: 0, terceiro: true, vagas: 16, valor: 80, cobranca: 'dupla', quadras: [], modoDuplas: 'fixas', potes: false, finalSets: false, pontosSet: 18, pontosTie: 15 });
 function trocarTorneio(id) {
-  S.tid = id; lsSet('tid', id); S.cat = null; S.editJogo = S.editCat = null; S.mesario = false;
+  S.tid = id; lsSet('tid', id); S.cat = null; S.rascunho = null; S.editJogo = S.editCat = null; S.mesario = false;
   const u = new URL(location.href); if (id) u.searchParams.set('t', id); else u.searchParams.delete('t'); u.searchParams.delete('m');
   history.replaceState(null, '', u.pathname + u.search + u.hash);
   assinarTorneio(); verificarMesario();
@@ -290,7 +311,7 @@ document.addEventListener('focusout', () => setTimeout(() => { if (S.pend && !ed
 
 function tabsList() {
   const t = [['painel', S.org ? 'Painel' : 'Ao vivo']];
-  if (S.org) t.push(['config', 'Torneio'], ['categorias', 'Categorias'], ['duplas', 'Duplas']);
+  if (S.org) t.push(['config', 'Torneio'], ['marca', 'Identidade visual'], ['categorias', 'Categorias'], ['duplas', 'Duplas']);
   t.push(['jogos', 'Jogos'], ['classificacao', 'Classificação'], ['chave', 'Mata-mata']);
   if (podeEscrever()) t.push(['mesario', 'Mesário']);
   t.push(['inscricao', S.org ? 'Inscrições' : 'Inscrição'], ['tv', 'Modo TV']);
@@ -298,10 +319,13 @@ function tabsList() {
 }
 function renderChrome() {
   const logado = S.user && !S.user.isAnonymous;
-  $('#topbar').innerHTML = `<div class="brand"><span class="ball" aria-hidden="true"></span>${esc(nomeDoSite)}</div>
+  const m = marca();
+  MK.aplicar(m, { titulo: T()?.nome });
+  $('#topbar').innerHTML = `<div class="brand">${logoHTML(m, '38px', 'var(--accent-board)')}<div class="nm"><b>${esc(m.nome)}</b>${m.sub ? `<span>${esc(m.sub)}</span>` : ''}</div></div>
     ${S.torneios.length ? `<select id="selT" aria-label="Torneio">${S.torneios.map(x => `<option value="${x.id}"${x.id === S.tid ? ' selected' : ''}>${esc(x.d.nome)}${x.d.data ? ' · ' + dataBR(x.d.data) : ''}</option>`).join('')}</select>` : '<span style="flex:1"></span>'}
     <span class="role">${S.org ? 'Organizador' : S.mesario ? 'Mesário' : 'Público'}</span>
     ${configurado ? `<div class="auth">${logado ? `<button data-act="sair" title="${esc(S.user.email || '')}">Sair</button>` : `<button data-act="entrar">Organizador</button>`}</div>` : ''}`;
+  $('#rodape').innerHTML = `<div class="rodape"><span>${esc(T()?.nome || m.nome)}${m.sub ? ' · ' + esc(m.sub) : ''}</span>${m.lema ? `<span>${esc(m.lema)}</span>` : ''}</div>`;
   $('#tabs').innerHTML = T() ? tabsList().map(([k, l]) => `<button data-act="tab" data-k="${k}" aria-current="${S.tab === k}">${l}</button>`).join('') : '';
 }
 function render() {
@@ -312,11 +336,12 @@ function render() {
 }
 function viewHTML() {
   if (!configurado) return setupHTML();
-  if (S.boot === 'carregando') return `<div class="empty"><div class="court"></div><p class="muted">Carregando torneios…</p></div>`;
-  if (S.boot === 'erro') return `<div class="empty"><div class="court"></div><h2>Não foi possível carregar os torneios</h2><p class="muted">Confira a internet. Se você acabou de instalar o site, verifique se o banco Firestore foi criado e se as regras foram publicadas (passos 2 e 4 do guia).</p></div>`;
+  if (S.boot === 'carregando') return `<div class="empty">${logoHTML(marca(), '120px')}<p class="muted">Carregando torneios…</p></div>`;
+  if (S.boot === 'erro') return `<div class="empty">${logoHTML(marca(), '120px')}<h2>Não foi possível carregar os torneios</h2><p class="muted">Confira a internet. Se você acabou de instalar o site, verifique se o banco Firestore foi criado e se as regras foram publicadas (passos 2 e 4 do guia).</p></div>`;
   if (!S.torneios.length) return emptyHTML();
   if (!T()) return '';
-  const v = { painel, config, categorias, duplas: duplasV, jogos: jogosV, classificacao, chave: chaveV, mesario, inscricao }[S.tab];
+  const aba = ['config', 'marca', 'categorias', 'duplas'].includes(S.tab) && !S.org ? 'painel' : S.tab;
+  const v = { painel, config, marca: marcaV, categorias, duplas: duplasV, jogos: jogosV, classificacao, chave: chaveV, mesario, inscricao }[aba];
   return (v || painel)();
 }
 function setupHTML() {
@@ -325,9 +350,9 @@ function setupHTML() {
   <p class="small muted" style="margin:0">O passo a passo completo está no arquivo README.md do repositório.</p></div>`;
 }
 function emptyHTML() {
-  if (!S.org) return `<div class="empty"><div class="court"></div><h2>Nenhum torneio publicado ainda</h2><p class="muted">Quando o organizador criar um torneio, as chaves, os jogos e os placares aparecem aqui ao vivo.</p>
+  if (!S.org) return `<div class="empty">${logoHTML(marca(), '160px')}<h2>Nenhum torneio publicado ainda</h2><p class="muted">Quando o organizador criar um torneio, as chaves, os jogos e os placares aparecem aqui ao vivo.</p>
     ${S.user && !S.user.isAnonymous ? `<p class="small muted">Você entrou como ${esc(S.user.email)}, mas este e-mail não está cadastrado como organizador (passo 6 do guia).</p>` : ''}</div>`;
-  return `<div class="empty"><div class="court"></div><h2>Monte seu primeiro torneio</h2>
+  return `<div class="empty">${logoHTML(marca(), '160px')}<h2>Monte seu primeiro torneio</h2>
   <p class="muted">Crie o torneio, cadastre as categorias e as duplas, sorteie as chaves e acompanhe os placares até o pódio. Para conhecer o sistema, gere um torneio de exemplo com duas categorias e jogos em andamento.</p>
   <div class="row" style="justify-content:center"><button class="btn" data-act="novoT">Criar torneio</button><button class="btn ghost" data-act="exemplo">Gerar torneio de exemplo</button></div></div>
   ${S.novoT ? novoTForm() : ''}`;
@@ -360,7 +385,7 @@ const gameRow = (j, opts = {}) => {
       <button type="button" class="link small" data-act="editJogo" data-id="">Cancelar</button></form>`;
   }
   return `<div class="game"><div class="t${wa ? ' win' : ''}">${esc(dn(j.a))}</div><div class="sc num">${sc}</div><div class="t b${wb ? ' win' : ''}">${esc(dn(j.b))}</div>
-   <div class="meta">${st}<span>${esc(c?.nome || '')}</span><span>${esc(fase || '')}</span>${detSets}${S.org && opts.edit && S.editJogo !== j.id && j.a && j.b ? `<button class="link small" data-act="editJogo" data-id="${j.id}">Editar placar</button>` : ''}</div>${edit}</div>`;
+   <div class="meta">${st}<span class="cat-tag" style="${estCat(c)}">${esc(c?.nome || '')}</span><span>${esc(fase || '')}</span>${detSets}${S.org && opts.edit && S.editJogo !== j.id && j.a && j.b ? `<button class="link small" data-act="editJogo" data-id="${j.id}">Editar placar</button>` : ''}</div>${edit}</div>`;
 };
 const podioHTML = pd => `<div class="podium">${[0, 1, 2].map(i => `<div class="p p${i + 1}"><b>${i + 1}º</b>${esc(pd[i] ? dn(pd[i]) : '—')}${i === 2 && pd[3] ? '<br>' + esc(dn(pd[3])) : ''}</div>`).join('')}</div>`;
 
@@ -375,12 +400,26 @@ function compartilharHTML() {
     <div><button class="link small" data-act="novoToken">Gerar novo link de mesário</button> <span class="small muted">(o link antigo deixa de funcionar)</span></div></section>`;
 }
 
+function heroHTML(t) {
+  const m = marca(), d = partesData(t.data);
+  const eb = [t.local, m.sub, t.exemplo ? 'exemplo' : ''].filter(Boolean).map(esc).join(' · ');
+  return `<section class="hero">
+    <div>
+      <div class="eyebrow">${eb || '&nbsp;'}</div>
+      <h1 class="tit">${esc(t.nome)}</h1>
+      ${cats().length ? `<div class="bars">${cats().map(c => `<span style="${estCat(c)}"><i></i>${esc(c.nome)}</span>`).join('')}</div>` : ''}
+      ${d ? `<div class="data"><b class="num">${d.dm}</b><span>${esc(d.semana)}<br><strong>${esc(d.mes)} ${d.ano}</strong></span></div>` : ''}
+      ${S.org ? `<div class="acoes"><button class="btn sm" data-act="tab" data-k="tv">Abrir modo TV</button><button class="btn ghost sm" data-act="novoT2">Novo torneio</button><button class="btn ghost sm" data-act="tab" data-k="marca">Identidade visual</button></div>` : ''}
+    </div>
+    <div class="emb" aria-hidden="true">${logoHTML(m, '360px')}</div>
+    ${m.lema ? `<div class="lema">${esc(m.lema)}</div>` : ''}
+  </section>`;
+}
 function painel() {
   const t = T(); const ao = S.jogos.filter(j => j.status === 'aovivo'); const prev = previsoes(); const nx = fila().slice(0, 6);
   const tot = S.jogos.filter(j => j.status !== 'bye'), fin = tot.filter(j => j.status === 'fim').length;
   return `<div class="stack">
-  <div class="sect-head"><div><div class="label">${esc(dataBR(t.data))}${t.local ? ' · ' + esc(t.local) : ''}</div><h2>${esc(t.nome)}</h2>${t.exemplo ? '<span class="chip">Exemplo</span>' : ''}</div>
-  ${S.org ? `<div class="row"><button class="btn ghost sm" data-act="novoT2">Novo torneio</button><button class="btn sm" data-act="tab" data-k="tv">Abrir modo TV</button></div>` : ''}</div>
+  ${heroHTML(t)}
   ${S.org && S.novoT ? novoTForm() : ''}
   <div class="panel stats"><div class="stat"><b class="num">${cats().length}</b><span class="label">categorias</span></div><div class="stat"><b class="num">${duplas().length}</b><span class="label">duplas</span></div><div class="stat"><b class="num">${fin}/${tot.length}</b><span class="label">jogos encerrados</span></div><div class="stat"><b class="num">${ao.length}/${(t.quadras || []).length}</b><span class="label">quadras em jogo</span></div></div>
   <div class="grid2">
@@ -389,7 +428,7 @@ function painel() {
   </div>
   <section class="stack"><h3>Categorias</h3><div class="grid2">${cats().map(c => {
     const js = jogosCat(c.id), f = js.filter(j => j.status === 'fim').length, [e, cl] = estadoCat(c), pd = podio(c);
-    return `<div class="panel cat-card"><div class="row between"><h3>${esc(c.nome)}</h3><span class="chip ${cl}">${e}</span></div>
+    return `<div class="panel cat-card" style="${estCat(c)}"><div class="row between"><h3>${esc(c.nome)}</h3><span class="chip ${cl}">${e}</span></div>
     <div class="small muted">${duplas().filter(d => d.cat === c.id).length} duplas · ${regraTxt(c)}</div>
     <div class="progress" aria-label="Progresso"><i style="width:${js.length ? Math.round(f / js.length * 100) : 0}%"></i></div>
     <div class="small muted num">${f} de ${js.length} jogos</div>${pd ? podioHTML(pd) : ''}</div>`;
@@ -440,11 +479,78 @@ function patsAdmin() {
     </form></section>`;
 }
 
+function marcaV() {
+  const salva = T().marca ? MK.completar(T().marca) : null, padrao = MK.completar(marcaPadrao);
+  if (!S.rascunho) S.rascunho = JSON.parse(JSON.stringify(salva || padrao));
+  const m = MK.completar(S.rascunho), mudou = JSON.stringify(m) !== JSON.stringify(salva || padrao);
+  const cor = (k, l) => `<div class="cor"><input id="mk-c-${k}" type="color" data-mk="cor" data-k="${k}" value="${m.cores[k]}" aria-label="${l}"><label class="field"><span>${l}</span><input id="mk-t-${k}" type="text" data-mk="corTxt" data-k="${k}" value="${m.cores[k]}" maxlength="7"></label></div>`;
+  const modelos = Object.entries(MK.MODELOS).map(([k, x]) => { const mm = MK.completar(x); return `<button type="button" class="modelo" data-act="modeloMarca" data-k="${k}" style="--m-bg:${mm.cores.fundo};--m-ink:${mm.cores.texto};--m-font:'${mm.fonteTitulo}'"><b>${esc(MK.NOMES_MODELOS[k])}</b><span class="sw">${mm.paleta.map(p => `<i style="background:${p.cor}"></i>`).join('')}</span></button>`; }).join('');
+  return `<div class="stack"><div class="sect-head"><div><div class="eyebrow">${esc(T().nome)}</div><h2>Identidade visual</h2><p class="muted small" style="margin:0">${salva ? 'Este torneio usa uma marca própria.' : 'Este torneio usa a marca padrão do site.'} As mudanças aparecem na hora como prévia e só valem para todos depois de salvar.</p></div>
+    <div class="row">${mudou ? `<button class="btn ghost sm" data-act="descartarMarca">Descartar mudanças</button>` : ''}<button class="btn" data-act="salvarMarca"${mudou ? '' : ' disabled'}>Salvar identidade</button></div></div>
+  <div class="mk">
+   <form class="stack" data-form="marca" onsubmit="return false">
+    <section class="panel stack" style="gap:14px"><h3>Modelos prontos</h3><div class="modelos">${modelos}</div><p class="dica" style="margin:0">Comece por um modelo e ajuste o que quiser. O modelo 100 Compromisso usa as cores e o escudo do manual de uniformes.</p></section>
+    <section class="panel form"><h3 class="full">Nome e logo</h3>
+      <label class="field"><span>Nome da marca</span><input id="mk-nome" data-mk="txt" name="nome" type="text" maxlength="40" value="${esc(m.nome)}"></label>
+      <label class="field"><span>Subtítulo</span><input id="mk-sub" data-mk="txt" name="sub" type="text" maxlength="30" value="${esc(m.sub)}" placeholder="Futvôlei"></label>
+      <label class="field full"><span>Lema (rodapé e telão)</span><input id="mk-lema" data-mk="txt" name="lema" type="text" maxlength="60" value="${esc(m.lema)}" placeholder="Disciplina · Foco · Resultado"></label>
+      <div class="full row" style="align-items:center;gap:16px">${logoHTML(m, '72px')}<div class="stack" style="gap:8px;flex:1;min-width:200px">
+        <label class="field"><span>Logo (PNG com fundo transparente é o ideal)</span><input id="mk-logo" type="file" accept="image/*" data-mk="logo"></label>
+        <label class="check"><input id="mk-tinta" type="checkbox" data-mk="chk" name="logoTinta"${m.logoTinta ? ' checked' : ''}> Logo de uma cor só: pintar com a cor de destaque e das categorias</label>
+        ${m.logo ? '<button type="button" class="link small" data-act="semLogo" style="align-self:flex-start">Remover logo (usar as iniciais)</button>' : ''}
+      </div></div>
+    </section>
+    <section class="panel stack" style="gap:14px"><h3>Cores</h3>
+      <div class="row"><label class="check"><input type="radio" name="modo" value="escuro" data-mk="radio"${m.modo === 'escuro' ? ' checked' : ''}> Fundo escuro</label><label class="check"><input type="radio" name="modo" value="claro" data-mk="radio"${m.modo === 'claro' ? ' checked' : ''}> Fundo claro</label></div>
+      <div class="cores">${cor('fundo', 'Fundo')}${cor('texto', 'Texto')}${cor('destaque', 'Destaque')}${cor('secundaria', 'Secundária')}</div>
+      <div><div class="field"><span>Cores das categorias</span></div><div class="pal">${m.paleta.map((p, i) => `<div class="it"><input id="mk-p${i}" type="color" data-mk="pal" data-i="${i}" value="${p.cor}" aria-label="Cor ${i + 1}"><input id="mk-pn${i}" type="text" data-mk="palNome" data-i="${i}" value="${esc(p.nome)}" maxlength="24" aria-label="Nome da cor ${i + 1}"><button type="button" class="link small" data-act="palMenos" data-i="${i}"${m.paleta.length <= 1 ? ' disabled' : ''}>Remover</button></div>`).join('')}</div>
+      ${m.paleta.length < 8 ? '<button type="button" class="link small" data-act="palMais" style="margin-top:8px">Adicionar cor</button>' : ''}</div>
+      <p class="dica" style="margin:0">Se alguma cor ficar difícil de ler sobre o fundo, o sistema ajusta o tom automaticamente nos textos.</p>
+    </section>
+    <section class="panel form"><h3 class="full">Fontes e cantos</h3>
+      <label class="field"><span>Fonte dos títulos</span><select id="mk-ft" data-mk="sel" name="fonteTitulo">${Object.keys(MK.FONTES_TITULO).map(f => `<option${f === m.fonteTitulo ? ' selected' : ''}>${f}</option>`).join('')}</select></label>
+      <label class="field"><span>Fonte do texto</span><select id="mk-fx" data-mk="sel" name="fonteTexto">${Object.keys(MK.FONTES_TEXTO).map(f => `<option${f === m.fonteTexto ? ' selected' : ''}>${f}</option>`).join('')}</select></label>
+      <div class="full row"><label class="check"><input type="radio" name="cantos" value="retos" data-mk="radio"${m.cantos === 'retos' ? ' checked' : ''}> Cantos retos</label><label class="check"><input type="radio" name="cantos" value="arredondados" data-mk="radio"${m.cantos === 'arredondados' ? ' checked' : ''}> Cantos arredondados</label></div>
+    </section>
+    ${salva ? `<section class="panel row between"><div><b>Voltar para a marca padrão</b><div class="small muted">Remove a marca própria deste torneio. A marca padrão é a de ${esc(padrao.nome)}.</div></div><button type="button" class="btn ghost sm" data-act="marcaPadrao">Usar marca padrão</button></section>` : ''}
+   </form>
+   <aside class="prev stack" style="gap:10px"><div class="eyebrow">Prévia</div>
+    <div class="mini"><div class="mh">${logoHTML(m, '30px', 'var(--accent-board)')}<b>${esc(m.nome)}</b></div>
+      <div class="mb"><div class="eyebrow">${esc(m.sub || '')}</div><div class="mt">${esc(T().nome)}</div>
+        <div class="row" style="gap:10px">${m.paleta.map(p => `<span class="cat-tag small" style="--cat:${MK.corCategoria(m, p.cor)}">${esc(p.nome)}</span>`).join('')}</div>
+        <div class="mg" style="--cat:${MK.corCategoria(m, m.paleta[0]?.cor)}"><span>Rafa / Tiago</span><b class="num">18 × 15</b><span style="text-align:right">Bruno / Caio</span></div>
+        <div class="row"><button type="button" class="btn sm">Botão</button><span class="chip live">ao vivo</span><span class="chip ok">encerrado</span></div>
+      </div></div>
+    <p class="small muted" style="margin:0">O site inteiro, o link público, o mesário e o telão já mostram a prévia. Abra o Modo TV para conferir.</p>
+   </aside>
+  </div></div>`;
+}
+function lerMarcaDoForm() {
+  const f = document.querySelector('form[data-form="marca"]'); if (!f) return S.rascunho;
+  const m = JSON.parse(JSON.stringify(S.rascunho || {}));
+  m.nome = f.querySelector('#mk-nome').value.trim().slice(0, 40) || 'Minha marca';
+  m.sub = f.querySelector('#mk-sub').value.trim().slice(0, 30);
+  m.lema = f.querySelector('#mk-lema').value.trim().slice(0, 60);
+  m.logoTinta = f.querySelector('#mk-tinta').checked;
+  m.modo = f.querySelector('input[name=modo]:checked')?.value || 'escuro';
+  m.cantos = f.querySelector('input[name=cantos]:checked')?.value || 'retos';
+  m.fonteTitulo = f.querySelector('#mk-ft').value; m.fonteTexto = f.querySelector('#mk-fx').value;
+  m.cores = { ...(m.cores || {}) };
+  ['fundo', 'texto', 'destaque', 'secundaria'].forEach(k => { m.cores[k] = MK.normHex(f.querySelector('#mk-t-' + k).value, f.querySelector('#mk-c-' + k).value); });
+  m.paleta = [...f.querySelectorAll('[data-mk="pal"]')].map(el => ({ cor: MK.normHex(el.value, '#888888'), nome: (f.querySelector('#mk-pn' + el.dataset.i)?.value || '').trim().slice(0, 24) }));
+  return m;
+}
+function previaMarca() {
+  S.rascunho = lerMarcaDoForm(); MK.aplicar(MK.completar(S.rascunho, MK.completar(marcaPadrao)), { titulo: T()?.nome });
+  const b = document.querySelector('[data-act="salvarMarca"]'); if (b) b.disabled = false;
+  S.pend = true; // redesenha a prévia (nomes, logo) quando o campo perder o foco
+}
+
 function categorias() {
   const t = T();
   const formatoTxt = c => ({ grupos: `Grupos (${c.chaves} chaves, ${c.classificam} por chave${+c.extras ? ` + ${c.extras} melhores ${+c.classificam + 1}º` : ''}) + mata-mata`, todos: 'Todos contra todos', mata: 'Mata-mata direto' })[c.formato];
   return `<div class="stack"><div class="sect-head"><div><h2>Categorias</h2><p class="muted small" style="margin:0">Cada categoria tem formato, pontuação, vagas e quadras próprias.</p></div><button class="btn" data-act="addCat">Adicionar categoria</button></div>
-  ${cats().map(c => S.editCat === c.id ? catForm(c, t) : `<div class="panel row between"><div style="min-width:0"><h3>${esc(c.nome)}</h3><div class="small muted">${formatoTxt(c)}${sorteadas(c) ? ` · duplas sorteadas${c.potes ? ' com 2 potes' : ''}` : ''} · ${regraTxt(c)}${c.finalSets && c.formato !== 'todos' ? ` · final em 3 sets (${c.pontosSet || c.pontos}/${c.pontosSet || c.pontos}/${c.pontosTie || 15})` : ''} · ${c.vagas} vagas · ${brl(c.valor)}/${c.cobranca}${c.quadras?.length ? ' · ' + esc(c.quadras.join(', ')) : ''}</div></div>
+  ${cats().map(c => S.editCat === c.id ? catForm(c, t) : `<div class="panel row between" style="${estCat(c)}"><div style="min-width:0"><h3 class="cat-tag">${esc(c.nome)}</h3><div class="small muted">${formatoTxt(c)}${sorteadas(c) ? ` · duplas sorteadas${c.potes ? ' com 2 potes' : ''}` : ''} · ${regraTxt(c)}${c.finalSets && c.formato !== 'todos' ? ` · final em 3 sets (${c.pontosSet || c.pontos}/${c.pontosSet || c.pontos}/${c.pontosTie || 15})` : ''} · ${c.vagas} vagas · ${brl(c.valor)}/${c.cobranca}${c.quadras?.length ? ' · ' + esc(c.quadras.join(', ')) : ''}</div></div>
     <div class="row"><button class="btn ghost sm" data-act="editCat" data-id="${c.id}">Editar</button><button class="btn danger sm" data-act="delCat" data-id="${c.id}">Remover</button></div></div>`).join('') || '<div class="panel muted">Nenhuma categoria. Adicione Iniciante, Misto, Feminino…</div>'}
   </div>`;
 }
@@ -463,7 +569,13 @@ function catForm(c, t) {
    <label class="check"><input id="cf-potes" name="potes" type="checkbox"${c.potes ? ' checked' : ''}> Sortear com 2 potes (cada dupla tem um atleta de cada pote)</label>
    <label class="check full"><input id="cf-fs" name="finalSets" type="checkbox"${c.finalSets ? ' checked' : ''}> Final em melhor de 3 sets</label>
    ${f('pontosSet', 'Sets da final até (pontos)', c.pontosSet || c.pontos || 18, 'number', 'min="1"')}${f('pontosTie', '3º set até (pontos)', c.pontosTie || 15, 'number', 'min="1"')}
-   <fieldset class="full" style="border:1px solid var(--line);border-radius:8px"><legend class="small muted">Quadras desta categoria (nenhuma marcada = todas)</legend><div class="row">${(t.quadras || []).map((q, i) => `<label class="check"><input id="cf-q${i}" type="checkbox" name="q" value="${esc(q)}"${c.quadras?.includes(q) ? ' checked' : ''}> ${esc(q)}</label>`).join('')}</div></fieldset>
+   <fieldset class="full opcoes"><legend>Cor da categoria (usada nos jogos, chaves, telão e placar)</legend><div class="swatches">
+     <label style="--sw:${corCat({ ...c, cor: '' })}"><input type="radio" name="cor" value=""${!c.cor ? ' checked' : ''}><i></i>Automática</label>
+     ${marca().paleta.map((p, i) => `<label style="--sw:${MK.corCategoria(marca(), p.cor)}"><input id="cf-cor${i}" type="radio" name="cor" value="${p.cor}"${(c.cor || '').toUpperCase() === p.cor ? ' checked' : ''}><i></i>${esc(p.nome)}</label>`).join('')}
+     <label style="--sw:${c.cor && !marca().paleta.some(p => p.cor === (c.cor || '').toUpperCase()) ? c.cor : 'var(--muted)'}"><input type="radio" name="cor" value="outra"${c.cor && !marca().paleta.some(p => p.cor === (c.cor || '').toUpperCase()) ? ' checked' : ''}><i></i>Outra:</label>
+     <input id="cf-cor-x" type="color" name="corOutra" value="${MK.normHex(c.cor, '#888888')}" aria-label="Outra cor">
+   </div></fieldset>
+   <fieldset class="full opcoes"><legend>Quadras desta categoria (nenhuma marcada = todas)</legend><div class="row">${(t.quadras || []).map((q, i) => `<label class="check"><input id="cf-q${i}" type="checkbox" name="q" value="${esc(q)}"${c.quadras?.includes(q) ? ' checked' : ''}> ${esc(q)}</label>`).join('')}</div></fieldset>
    <div class="row full"><button class="btn">Salvar categoria</button><button type="button" class="btn ghost" data-act="editCat" data-id="">Cancelar</button></div></form>`;
 }
 
@@ -529,7 +641,7 @@ function jogosV() {
   const pk = catPicker(); if (!S.cat) return semCat(); const c = catById(S.cat); const prev = previsoes();
   const js = jogosCat(c.id).sort((x, y) => x.ordem - y.ordem);
   const grp = {}; js.forEach(j => { const k = j.fase === 'grupo' ? `Rodada ${j.rodada}` : j.rodadaNome; (grp[k] = grp[k] || []).push(j); });
-  return `<div class="stack"><div class="sect-head"><div><h2>Jogos · ${esc(c.nome)}</h2><p class="muted small" style="margin:0">${regraTxt(c)}</p></div>${pk}</div>
+  return `<div class="stack" style="${estCat(c)}"><div class="sect-head"><div><div class="eyebrow cat-tag">${esc(c.nome)}</div><h2>Jogos</h2><p class="muted small" style="margin:0">${regraTxt(c)}</p></div>${pk}</div>
   ${Object.keys(grp).length ? Object.entries(grp).map(([k, g]) => `<section class="panel"><h3>${esc(k)}</h3><div class="games">${g.map(j => gameRow(j, { prev, edit: true })).join('')}</div></section>`).join('') : `<div class="panel muted">Os jogos aparecem aqui depois do sorteio.</div>`}</div>`;
 }
 
@@ -539,7 +651,7 @@ function classificacao() {
   const chs = chavesCat(c.id); const gj = S.jogos.filter(j => j.cat === c.id && j.fase === 'grupo'); const done = gj.length && gj.every(j => j.status === 'fim');
   const temMata = S.jogos.some(j => j.cat === c.id && j.fase === 'mata');
   const sel = new Set(c.formato === 'grupos' ? L.classificados(c, duplas(), S.jogos, manuais()) : []);
-  return `<div class="stack"><div class="sect-head"><div><h2>Classificação · ${esc(c.nome)}</h2><p class="muted small" style="margin:0">Critérios: vitórias, saldo, pontos feitos${opt('desempate') ? ', desempate do organizador' : ''} e confronto direto.</p></div><div class="row">${pk}
+  return `<div class="stack" style="${estCat(c)}"><div class="sect-head"><div><div class="eyebrow cat-tag">${esc(c.nome)}</div><h2>Classificação</h2><p class="muted small" style="margin:0">Critérios: vitórias, saldo, pontos feitos${opt('desempate') ? ', desempate do organizador' : ''} e confronto direto.</p></div><div class="row">${pk}
    ${S.org && c.formato === 'grupos' ? `<button class="btn" data-act="gerarMata" data-id="${c.id}"${done ? '' : ' disabled'}>${temMata ? 'Refazer mata-mata' : 'Gerar mata-mata'}</button>` : ''}</div></div>
    ${S.org && c.formato === 'grupos' && !done && gj.length ? `<p class="small muted" style="margin:0">O mata-mata fica disponível quando os ${gj.length} jogos da fase de grupos terminarem (${gj.filter(j => j.status === 'fim').length} encerrados).</p>` : ''}
   ${chs.length ? `<div class="grid2">${chs.map(ch => `<section class="panel"><h3>${c.formato === 'todos' ? 'Tabela' : 'Chave ' + ch}</h3><div class="tw"><table><thead><tr><th></th><th>Dupla</th><th class="n">J</th><th class="n">V</th><th class="n">SG</th><th class="n">PF</th>${S.org && opt('desempate') ? '<th></th>' : ''}</tr></thead><tbody>
@@ -547,7 +659,7 @@ function classificacao() {
       return tb.map((r, i) => `<tr class="${(c.formato === 'grupos' ? sel.has(r.id) : i < 3) ? 'q' : ''}"><td class="pos">${i + 1}</td><td>${esc(dn(r.id))}${r.empate && r.j > 0 && S.org ? ' <span class="chip">empate</span>' : ''}</td><td class="n">${r.j}</td><td class="n">${r.v}</td><td class="n">${r.sg > 0 ? '+' : ''}${r.sg}</td><td class="n">${r.pp}</td>${mov ? `<td class="n mv">${igual(r, tb[i - 1]) ? `<button class="link" data-act="desempate" data-c="${c.id}" data-ch="${ch}" data-i="${i}" data-dir="-1" aria-label="Subir ${esc(dn(r.id))}">▲</button>` : ''}${igual(r, tb[i + 1]) ? `<button class="link" data-act="desempate" data-c="${c.id}" data-ch="${ch}" data-i="${i}" data-dir="1" aria-label="Descer ${esc(dn(r.id))}">▼</button>` : ''}</td>` : ''}</tr>`).join(''); })()}</tbody></table></div>
     ${S.org && opt('desempate') && manuais()[c.id + '|' + ch] ? `<button class="link small" data-act="limparDesempate" data-c="${c.id}" data-ch="${ch}">Desfazer desempate manual desta chave</button>` : ''}</section>`).join('')}</div>
     ${S.org && opt('desempate') ? '<p class="small muted" style="margin:0">Quando duas duplas empatam em vitórias, saldo e pontos, use ▲ ▼ para definir a ordem.</p>' : ''}
-    <p class="small muted" style="margin:0">A barra verde marca as duplas ${c.formato === 'todos' ? 'no pódio' : 'classificadas para o mata-mata'}.</p>` : '<div class="panel muted">A classificação aparece depois do sorteio das chaves.</div>'}</div>`;
+    <p class="small muted" style="margin:0">A barra colorida marca as duplas ${c.formato === 'todos' ? 'no pódio' : 'classificadas para o mata-mata'}.</p>` : '<div class="panel muted">A classificação aparece depois do sorteio das chaves.</div>'}</div>`;
 }
 
 function bracketHTML(c) {
@@ -565,7 +677,7 @@ function bracketHTML(c) {
 }
 function chaveV() {
   const pk = catPicker(); if (!S.cat) return semCat(); const c = catById(S.cat); const pd = podio(c); const b = bracketHTML(c);
-  return `<div class="stack"><div class="sect-head"><h2>Mata-mata · ${esc(c.nome)}</h2>${pk}</div>
+  return `<div class="stack" style="${estCat(c)}"><div class="sect-head"><div><div class="eyebrow cat-tag">${esc(c.nome)}</div><h2>Mata-mata</h2></div>${pk}</div>
   ${pd ? `<section class="panel stack"><h3>Pódio</h3>${podioHTML(pd)}</section>` : ''}
   ${b ? `<section class="panel">${b}</section>` : `<div class="panel muted">${c.formato === 'todos' ? 'Esta categoria é decidida na tabela de todos contra todos.' : 'A chave do mata-mata aparece quando a fase de grupos terminar e o organizador gerar o mata-mata.'}</div>`}</div>`;
 }
@@ -578,7 +690,7 @@ function mesario() {
   const j = S.jogos.find(x => x.status === 'aovivo' && x.quadra === S.quadra);
   if (!j) {
     const nx = fila(S.quadra)[0];
-    return `<div class="stack"><h2>Mesário · ${esc(S.quadra)}</h2>${qsel}<div class="board"><div class="bar"><span>Quadra livre</span></div>
+    return `<div class="stack"><h2>Mesário · ${esc(S.quadra)}</h2>${qsel}<div class="board" style="${estCat(nx ? catById(nx.cat) : null, 'board')}"><div class="wm" aria-hidden="true">${logoHTML(marca(), '420px', 'var(--cat)')}</div><div class="bar"><span>Quadra livre</span></div>
     ${nx ? `<div style="text-align:center"><div class="label" style="color:var(--board-dim)">Próximo da fila · ${esc(catById(nx.cat)?.nome || '')} · ${esc(nx.fase === 'grupo' ? 'Chave ' + nx.chave : nx.rodadaNome)}</div><h2 style="margin:8px 0 16px">${esc(dn(nx.a))} × ${esc(dn(nx.b))}</h2><button class="btn" data-act="chamar">Chamar próximo jogo</button></div>` : '<p style="text-align:center;margin:0">Nenhum jogo disponível para esta quadra agora.</p>'}</div></div>`;
   }
   const c = catById(j.cat), md3 = emSets(j), rg = regraAtual(j), fim = L.fimValido(rg, j.pa, j.pb);
@@ -586,10 +698,10 @@ function mesario() {
   const decide = md3 && fim && ((j.pa > j.pb ? sv.a : sv.b) + 1 === 2);
   const side = (k, id) => `<div class="side"><div class="nm">${esc(dn(id))}</div><div class="pt">${j[k]}</div><div class="pm"><button class="minus" data-act="ponto" data-k="${k}" data-d="-1" aria-label="Tirar ponto"${j[k] <= 0 ? ' disabled' : ''}>−</button><button class="plus" data-act="ponto" data-k="${k}" data-d="1" aria-label="Somar ponto"${fim ? ' disabled' : ''}>+</button></div></div>`;
   return `<div class="stack"><h2>Mesário · ${esc(S.quadra)}</h2>${qsel}
-  <div class="board"><div class="bar"><span class="chip live">ao vivo</span><span>${esc(c.nome)} · ${esc(j.fase === 'grupo' ? 'Chave ' + j.chave : j.rodadaNome)} · ${md3 ? `${nSet}º set até ${rg.pontos}${c.vantagem ? ', vantagem de 2' : ''}` : regraTxt(c)}</span></div>
+  <div class="board" style="${estCat(c, 'board')}"><div class="wm" aria-hidden="true">${logoHTML(marca(), '420px', 'var(--cat)')}</div><div class="bar"><span class="chip live">ao vivo</span><span>${esc(c.nome)} · ${esc(j.fase === 'grupo' ? 'Chave ' + j.chave : j.rodadaNome)} · ${md3 ? `${nSet}º set até ${rg.pontos}${c.vantagem ? ', vantagem de 2' : ''}` : regraTxt(c)}</span></div>
    ${md3 ? `<div class="setsbar"><span>Sets</span><b class="num">${sv.a} × ${sv.b}</b>${(j.sets || []).length ? `<span>${(j.sets || []).map(x => x.join('-')).join(' · ')}</span>` : ''}</div>` : ''}
    <div class="sides">${side('pa', j.a)}${side('pb', j.b)}</div>
-   <div class="row between"><button class="btn ghost sm" style="color:var(--board-ink);border-color:#2c4657" data-act="devolver">Devolver à fila</button>
+   <div class="row between"><button class="btn ghost sm" data-act="devolver">Devolver à fila</button>
    <button class="btn" data-act="encerrar"${fim ? '' : ' disabled'}>${!fim ? (md3 ? `${nSet}º set em andamento` : 'Jogo em andamento') : md3 && !decide ? `Fechar ${nSet}º set` : 'Encerrar jogo'}</button></div></div></div>`;
 }
 
@@ -627,17 +739,17 @@ function inscricao() {
 function tvSlides() {
   const t = T(); if (!t) return []; const sl = []; const prev = previsoes();
   const ao = S.jogos.filter(j => j.status === 'aovivo');
-  if (ao.length) sl.push(`<h2>Em quadra agora</h2><div class="tvgames">${ao.map(j => `<div class="tvg"><div class="nm">${esc(dn(j.a))}</div><div class="pt num">${j.pa} <span style="color:#8ea3af">×</span> ${j.pb}</div><div class="nm b">${esc(dn(j.b))}</div><div class="mt">${esc(j.quadra)} · ${esc(catById(j.cat)?.nome || '')} · ${esc(j.fase === 'grupo' ? 'Chave ' + j.chave : j.rodadaNome)}${emSets(j) ? ` · ${(j.sets || []).length + 1}º set · sets ${L.setsVencidos(j.sets).a}×${L.setsVencidos(j.sets).b}` : ''}</div></div>`).join('')}</div>`);
+  if (ao.length) sl.push(`<h2>Em quadra agora</h2><div class="tvgames">${ao.map(j => `<div class="tvg" style="${estCat(catById(j.cat), 'tv')}"><div class="nm">${esc(dn(j.a))}</div><div class="pt num">${j.pa} <span style="color:var(--tv-dim)">×</span> ${j.pb}</div><div class="nm b">${esc(dn(j.b))}</div><div class="mt">${esc(j.quadra)} · ${esc(catById(j.cat)?.nome || '')} · ${esc(j.fase === 'grupo' ? 'Chave ' + j.chave : j.rodadaNome)}${emSets(j) ? ` · ${(j.sets || []).length + 1}º set · sets ${L.setsVencidos(j.sets).a}×${L.setsVencidos(j.sets).b}` : ''}</div></div>`).join('')}</div>`);
   const nx = fila().slice(0, 7);
-  if (nx.length) sl.push(`<h2>Próximos jogos</h2><div class="tvlist">${nx.map(j => `<div><span class="num">~${hora(prev[j.id])}</span><span>${esc(dn(j.a))} × ${esc(dn(j.b))}</span><span style="color:#8ea3af">${esc(catById(j.cat)?.nome || '')}</span></div>`).join('')}</div>`);
+  if (nx.length) sl.push(`<h2>Próximos jogos</h2><div class="tvlist">${nx.map(j => `<div style="${estCat(catById(j.cat), 'tv')}"><span class="num hr">${hora(prev[j.id])}</span><span>${esc(dn(j.a))} × ${esc(dn(j.b))}</span><span class="ct">${esc(catById(j.cat)?.nome || '')}</span></div>`).join('')}</div>`);
   cats().forEach(c => {
     const chs = chavesCat(c.id);
     if (c.formato !== 'mata' && chs.length && !S.jogos.some(j => j.cat === c.id && j.fase === 'mata')) for (let i = 0; i < chs.length; i += 2) {
       const part = chs.slice(i, i + 2);
-      sl.push(`<h2>${esc(c.nome)} · Classificação</h2><div class="tvgames">${part.map(ch => `<div><div style="color:#8ea3af;font-family:var(--f-display);font-size:1.4em">${c.formato === 'todos' ? 'Tabela' : 'Chave ' + ch}</div><table><thead><tr><th></th><th>Dupla</th><th class="n">V</th><th class="n">SG</th></tr></thead><tbody>${tabela(c.id, ch).map((r, k) => `<tr><td>${k + 1}</td><td>${esc(dn(r.id))}</td><td class="n">${r.v}</td><td class="n">${r.sg > 0 ? '+' : ''}${r.sg}</td></tr>`).join('')}</tbody></table></div>`).join('')}</div>`);
+      sl.push(`<div style="${estCat(c, 'tv')}"><h2>${esc(c.nome)} · Classificação</h2></div><div class="tvgames" style="${estCat(c, 'tv')}">${part.map(ch => `<div><div style="color:var(--tv-dim);font-family:var(--f-display);font-size:1.4em;letter-spacing:.06em">${c.formato === 'todos' ? 'Tabela' : 'Chave ' + ch}</div><table><thead><tr><th></th><th>Dupla</th><th class="n">V</th><th class="n">SG</th></tr></thead><tbody>${tabela(c.id, ch).map((r, k) => `<tr><td>${k + 1}</td><td>${esc(dn(r.id))}</td><td class="n">${r.v}</td><td class="n">${r.sg > 0 ? '+' : ''}${r.sg}</td></tr>`).join('')}</tbody></table></div>`).join('')}</div>`);
     }
-    const b = bracketHTML(c); if (b) sl.push(`<h2>${esc(c.nome)} · Mata-mata</h2>${b}`);
-    const pd = podio(c); if (pd) sl.push(`<h2>${esc(c.nome)} · Pódio</h2>${podioHTML(pd)}`);
+    const b = bracketHTML(c); if (b) sl.push(`<div style="${estCat(c, 'tv')}" class="stack"><h2>${esc(c.nome)} · Mata-mata</h2>${b}</div>`);
+    const pd = podio(c); if (pd) sl.push(`<div style="${estCat(c, 'tv')}" class="stack"><h2>${esc(c.nome)} · Pódio</h2>${podioHTML(pd)}</div>`);
   });
   if (opt('patrocinadores') && S.pats.length) {
     const ps = patsOrdem(), card = (p, big) => `<div class="tvpat${big ? ' big' : ''}">${p.logo ? `<img class="logo" src="${p.logo}" alt="${esc(p.nome)}">` : `<b class="nome">${esc(p.nome)}</b>`}<div class="tx">${p.logo ? `<b>${esc(p.nome)}</b>` : ''}${p.frase ? `<span>${esc(p.frase)}</span>` : ''}</div>${p.link ? `<div class="qrbox">${qrImg(linkPat(p.link))}</div>` : ''}</div>`;
@@ -646,8 +758,8 @@ function tvSlides() {
     for (let i = 0; i < outros.length; i += 6) sl.push(`<h2>Patrocinadores</h2><div class="tvpats">${outros.slice(i, i + 6).map(p => card(p, false)).join('')}</div>`);
   }
   const sp = opt('patrocinadores') && !S.pats.length ? (t.patrocinadores || '').split('\n').map(s => s.trim()).filter(Boolean) : [];
-  if (sp.length) sl.push(`<h2>Patrocinadores</h2><div class="spons">${sp.map(s => { const [a, ...b] = s.split(':'); return b.length ? `<div><span style="color:#8ea3af;text-transform:uppercase;letter-spacing:.1em">${esc(a)}</span><b>${esc(b.join(':').trim())}</b></div>` : `<div><b>${esc(s)}</b></div>`; }).join('')}</div>`);
-  if (!sl.length) sl.push(`<h2>${esc(t.nome)}</h2><p style="font-size:1.6rem;color:#8ea3af">Os jogos aparecem aqui assim que as chaves forem sorteadas.</p>`);
+  if (sp.length) sl.push(`<h2>Patrocinadores</h2><div class="spons">${sp.map(s => { const [a, ...b] = s.split(':'); return b.length ? `<div><span style="color:var(--tv-dim);text-transform:uppercase;letter-spacing:.2em">${esc(a)}</span><b>${esc(b.join(':').trim())}</b></div>` : `<div><b>${esc(s)}</b></div>`; }).join('')}</div>`);
+  if (!sl.length) sl.push(`<h2>${esc(t.nome)}</h2><p style="font-size:1.6rem;color:var(--tv-dim)">Os jogos aparecem aqui assim que as chaves forem sorteadas.</p>`);
   return sl;
 }
 let tvTimer = null, wake = null;
@@ -655,9 +767,11 @@ function renderTV() {
   if (!S.tv) { $('#tvroot').innerHTML = ''; return; }
   const t = T(), sl = tvSlides(); S.tvIdx %= sl.length;
   const sp = !opt('patrocinadores') ? [] : S.pats.length ? patsOrdem().map(p => p.nome) : (t?.patrocinadores || '').split('\n').map(s => s.split(':').pop().trim()).filter(Boolean);
-  $('#tvroot').innerHTML = `<div class="tv" role="dialog" aria-label="Modo TV"><div class="tvh"><h1>${esc(t?.nome || '')}</h1><div class="row"><span class="chip live" style="font-size:.9rem">ao vivo</span><button class="tvx" data-act="tvFull">Tela cheia</button><button class="tvx" data-act="fecharTV">Sair</button></div></div>
+  const m = marca(), d = partesData(t?.data);
+  $('#tvroot').innerHTML = `<div class="tv" role="dialog" aria-label="Modo TV"><div class="wm" aria-hidden="true">${logoHTML(m, '70vh')}</div>
+   <div class="tvh"><div class="id">${logoHTML(m, '84px')}<div><div class="eb">${[m.nome, t?.local, d ? d.dm : ''].filter(Boolean).map(esc).join(' · ')}</div><h1>${esc(t?.nome || '')}</h1></div></div><div class="row"><span class="chip live">ao vivo</span><button class="tvx" data-act="tvFull">Tela cheia</button><button class="tvx" data-act="fecharTV">Sair</button></div></div>
    <div class="slide">${sl[S.tvIdx]}</div>
-   <div class="foot"><span>${sp.length ? 'Patrocínio: ' + sp.map(esc).join(' · ') : esc(t?.local || '')}</span><div class="dots">${sl.map((_, i) => `<i class="${i === S.tvIdx ? 'on' : ''}"></i>`).join('')}</div></div></div>`;
+   <div class="foot"><span>${sp.length ? 'Patrocínio: ' + sp.map(esc).join(' · ') : esc(m.lema || t?.local || '')}</span><div class="dots">${sl.map((_, i) => `<i class="${i === S.tvIdx ? 'on' : ''}"></i>`).join('')}</div></div></div>`;
 }
 function abrirTV() { S.tv = true; S.tvIdx = 0; clearInterval(tvTimer); tvTimer = setInterval(() => { S.tvIdx++; renderTV(); }, 12000); renderTV(); navigator.wakeLock?.request('screen').then(w => wake = w).catch(() => { }); }
 function renderModal() {
@@ -673,7 +787,7 @@ async function copiar(txt) {
 /* ---------- eventos ---------- */
 const jogoAoVivo = () => S.jogos.find(x => x.status === 'aovivo' && x.quadra === S.quadra);
 const ACT = {
-  tab: d => { if (d.k === 'tv') { abrirTV(); return; } S.tab = d.k; S.editJogo = null; S.editCat = null; history.replaceState(null, '', location.pathname + location.search + (d.k === 'painel' ? '' : '#' + d.k)); render(); window.scrollTo(0, 0); },
+  tab: d => { if (d.k === 'tv') { abrirTV(); return; } if (S.tab === 'marca' && d.k !== 'marca') S.rascunho = null; S.tab = d.k; S.editJogo = null; S.editCat = null; history.replaceState(null, '', location.pathname + location.search + (d.k === 'painel' ? '' : '#' + d.k)); render(); window.scrollTo(0, 0); },
   entrar: async () => { const p = new GoogleAuthProvider(); try { await signInWithPopup(auth, p); } catch (e) { if (String(e.code).includes('popup-blocked')) await signInWithRedirect(auth, p); else erro(e); } },
   sair: () => signOut(auth).then(() => toast('Você saiu.')),
   novoT: () => { S.novoT = true; render(); }, novoT2: () => { S.novoT = !S.novoT; render(); }, cancelNovo: () => { S.novoT = false; render(); },
@@ -720,6 +834,13 @@ const ACT = {
     toast('Novo link de mesário gerado.');
   }),
   insc: d => decidirInsc(d.id, d.s),
+  modeloMarca: d => { const atual = S.rascunho || {}; S.rascunho = JSON.parse(JSON.stringify(MK.MODELOS[d.k])); if (!S.rascunho.logo && atual.logo && atual.logo.startsWith('data:')) { S.rascunho.logo = atual.logo; S.rascunho.logoTinta = atual.logoTinta; } render(); },
+  semLogo: () => { S.rascunho = { ...lerMarcaDoForm(), logo: '', logoTinta: false }; render(); },
+  palMais: () => { const m = lerMarcaDoForm(); m.paleta = [...m.paleta, { nome: 'Nova cor', cor: m.cores.secundaria }]; S.rascunho = m; render(); },
+  palMenos: d => { const m = lerMarcaDoForm(); m.paleta = m.paleta.filter((_, i) => i !== +d.i); S.rascunho = m; render(); },
+  descartarMarca: () => { S.rascunho = null; render(); toast('Mudanças descartadas.'); },
+  salvarMarca: () => { const m = MK.completar(lerMarcaDoForm(), MK.completar(marcaPadrao)); saveT({ marca: m }).then(() => { S.rascunho = null; render(); toast('Identidade visual salva. Todos os links já mostram a nova marca.'); }); },
+  marcaPadrao: () => confirmar('Voltar este torneio para a marca padrão do site? A marca própria dele será apagada.', 'Usar marca padrão', () => { saveT({ marca: null }).then(() => { S.rascunho = null; render(); toast('O torneio voltou a usar a marca padrão.'); }); }),
   verComp: async d => {
     try { const s = await getDoc(R(`torneios/${S.tid}/comprovantes/${d.id}`)); if (!s.exists()) return toast('Comprovante não encontrado.'); S.foto = s.data().img; renderModal(); } catch (e) { erro(e); }
   },
@@ -738,8 +859,22 @@ const ACT = {
   modalOk: () => { const f = S.modal?.fn; S.modal = null; renderModal(); f && f(); },
 };
 document.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; e.preventDefault(); ACT[b.dataset.act]?.(b.dataset, b); });
+document.addEventListener('input', e => {
+  const el = e.target; if (!el.dataset?.mk) return;
+  if (el.dataset.mk === 'cor') { const t = document.getElementById('mk-t-' + el.dataset.k); if (t) t.value = el.value.toUpperCase(); }
+  if (el.dataset.mk === 'corTxt') { const v = MK.normHex(el.value, ''); if (!v) return; const c = document.getElementById('mk-c-' + el.dataset.k); if (c) c.value = v.toLowerCase(); }
+  if (el.dataset.mk === 'logo') return;
+  previaMarca();
+});
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.dataset?.mk === 'logo') {
+    const file = el.files?.[0]; if (!file) return;
+    comprimirImagem(file, 640, 300000, true).then(url => { S.rascunho = { ...lerMarcaDoForm(), logo: url }; el.blur(); render(); toast('Logo carregado. Confira a prévia e salve.'); })
+      .catch(er => toast(er.message === 'formato' ? 'Não consegui abrir esta imagem. Use PNG ou JPG.' : 'O logo ficou grande demais. Use uma imagem menor.'));
+    return;
+  }
+  if (el.dataset?.mk) { previaMarca(); if (el.type === 'radio' || el.tagName === 'SELECT' || el.type === 'checkbox') { el.blur(); render(); } return; }
   if (el.id === 'selT') { trocarTorneio(el.value); render(); return; }
   if (el.dataset.change === 'cat') { S.cat = el.value; el.blur(); render(); }
   if (el.dataset.change === 'pote') { saveT({ atletas: atletas().map(a => a.id === el.dataset.id ? { ...a, pote: +el.value } : a) }); el.blur(); render(); return; }
@@ -759,7 +894,7 @@ const FORM = {
   config: fd => { const o = Object.fromEntries(fd); saveT({ nome: o.nome, data: o.data, local: o.local, quadras: o.quadras.split(',').map(s => s.trim()).filter(Boolean), duracao: num(o.duracao, 20, 5), contato: o.contato, pix: o.pix, pixNome: o.pixNome, inscricoes: fd.has('inscricoes'), opcoes: { comprovante: fd.has('op_comprovante'), desempate: fd.has('op_desempate'), patrocinadores: fd.has('op_patrocinadores') } }).then(() => toast('Torneio salvo.')); },
   cat: (fd, f) => {
     const o = Object.fromEntries(fd); const id = f.dataset.id;
-    const up = { nome: o.nome, formato: o.formato, chaves: num(o.chaves, 1, 1), classificam: num(o.classificam, 1, 1), extras: num(o.extras, 0, 0), pontos: num(o.pontos, 18, 1), teto: num(o.teto, 0, 0), vagas: num(o.vagas, 2, 2), valor: num(o.valor, 0, 0), cobranca: o.cobranca, vantagem: fd.has('vantagem'), terceiro: fd.has('terceiro'), quadras: fd.getAll('q'), modoDuplas: o.modoDuplas === 'sorteadas' ? 'sorteadas' : 'fixas', potes: fd.has('potes'), finalSets: fd.has('finalSets'), pontosSet: num(o.pontosSet, 18, 1), pontosTie: num(o.pontosTie, 15, 1) };
+    const up = { nome: o.nome, formato: o.formato, chaves: num(o.chaves, 1, 1), classificam: num(o.classificam, 1, 1), extras: num(o.extras, 0, 0), pontos: num(o.pontos, 18, 1), teto: num(o.teto, 0, 0), vagas: num(o.vagas, 2, 2), valor: num(o.valor, 0, 0), cobranca: o.cobranca, vantagem: fd.has('vantagem'), terceiro: fd.has('terceiro'), quadras: fd.getAll('q'), modoDuplas: o.modoDuplas === 'sorteadas' ? 'sorteadas' : 'fixas', potes: fd.has('potes'), finalSets: fd.has('finalSets'), pontosSet: num(o.pontosSet, 18, 1), pontosTie: num(o.pontosTie, 15, 1), cor: o.cor === 'outra' ? MK.normHex(o.corOutra, '') : MK.normHex(o.cor, '') };
     S.editCat = null; saveT({ categorias: cats().map(c => c.id === id ? { ...c, ...up } : c) }).then(() => toast('Categoria salva.'));
   },
   addDupla: (fd, f) => { const o = Object.fromEntries(fd); saveT({ duplas: [...duplas(), { id: uid(), cat: S.cat, j1: o.j1.trim(), j2: o.j2.trim(), cabeca: fd.has('cabeca'), chave: null }] }); f.reset(); },
@@ -817,7 +952,7 @@ document.addEventListener('submit', e => { e.preventDefault(); const f = e.targe
 /* ---------- início ---------- */
 function init() {
   const h = location.hash.slice(1);
-  if (['mesario', 'inscricao', 'jogos', 'classificacao', 'chave'].includes(h)) S.tab = h;
+  if (['mesario', 'inscricao', 'jogos', 'classificacao', 'chave', 'marca', 'config'].includes(h)) S.tab = h;
   if (!configurado) { S.boot = 'ok'; render(); return; }
   render();
   let primeiraVez = true;

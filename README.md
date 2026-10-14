@@ -88,6 +88,18 @@ Esses valores não são senhas. Quem protege os dados são as regras do passo 4.
 
 ---
 
+## Identidade visual (white-label)
+
+O sistema pode ser vendido com a marca de cada campeonato:
+
+- **Marca padrão da instalação**: definida em [`js/config.js`](js/config.js) (`marcaPadrao`). Hoje é a da **100 Compromisso**: fundo preto, Bebas Neue e Montserrat, escudo e as cores do manual de uniformes (azul `#2AA8E8`, dourado `#D4A25E`, rosa `#F2A2C6`, grafite `#9A9A9A`).
+- **Marca por torneio**: na aba **Identidade visual**, o organizador escolhe um modelo pronto, envia o logo, define nome, lema, cores, fontes e cantos, e vê a prévia ao vivo no site, no mesário e no telão. Ao salvar, todos os links do torneio passam a usar essa marca.
+- **Cor por categoria**: cada categoria pode ter a sua cor (como os uniformes). Ela aparece nos jogos, na classificação, no mata-mata, no placar do mesário e no telão.
+- **Logo de uma cor só**: logos monocromáticos com fundo transparente podem ser pintados automaticamente com a cor de destaque e das categorias.
+- O sistema corrige sozinho cores com pouco contraste para manter os textos legíveis.
+
+Para entregar a outro cliente numa instalação própria: crie o projeto Firebase dele, troque `firebaseConfig` e `marcaPadrao` em `js/config.js`, troque os ícones em `img/marca/` e o nome em `manifest.webmanifest`.
+
 ## Como usar no dia do torneio
 
 1. Abra o site e clique em **Organizador** (no topo) para entrar com o Google.
@@ -121,7 +133,10 @@ O plano grátis do Firebase permite cerca de 50 mil leituras e 20 mil gravaçõe
 | `index.html` | Página do site |
 | `css/style.css` | Visual (claro e escuro) |
 | `js/app.js` | Telas e ligação com o Firebase |
+| `js/marca.js` | Identidade visual: modelos, cálculo das cores e aplicação da marca |
 | `js/logica.js` | Regras do torneio: pontuação, classificação, sorteio e mata-mata |
 | `js/config.js` | Configuração do seu projeto Firebase |
 | `firestore.rules` | Regras de segurança do banco |
 | `testes/logica.test.mjs` | Testes das regras (rode com `node testes/logica.test.mjs`) |
+| `testes/marca.test.mjs` | Testes de contraste das marcas (rode com `node testes/marca.test.mjs`) |
+| `img/marca/` | Escudo e ícones da marca |

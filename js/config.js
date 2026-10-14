@@ -11,5 +11,16 @@ export const firebaseConfig = {
   appId: "1:872948460855:web:9ff571b48559c8f549beb2"
 };
 
-// Nome que aparece no topo do site.
-export const nomeDoSite = "Arena Futvôlei";
+// Marca padrão desta instalação (white-label).
+// Para vender o sistema para outro campeonato, troque estes valores (ou use um dos modelos
+// de js/marca.js). Cada torneio também pode ter a própria marca, na aba "Identidade visual".
+import { MODELOS } from './marca.js';
+export const marcaPadrao = {
+  ...MODELOS.cem,
+  nome: '100 Compromisso',
+  sub: 'Futvôlei',
+  lema: 'Disciplina · Foco · Resultado',
+};
+
+// Mantido por compatibilidade.
+export const nomeDoSite = marcaPadrao.nome;
