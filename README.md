@@ -9,7 +9,7 @@ Sistema online para organizar torneios de futvôlei, do sorteio ao pódio.
 - **Mesário pelo celular**: link secreto, sem cadastro. Escolhe a quadra, chama o próximo jogo e marca os pontos com + e −.
 - **Classificação automática**: vitórias, saldo, pontos feitos, confronto direto e melhores terceiros.
 - **Mata-mata automático**: oitavas, quartas, semis, final e 3º lugar, com avanço sozinho do vencedor.
-- **Inscrições online** com chave Pix para copiar e aprovação pelo organizador.
+- **Página de inscrição completa e configurável**: boas-vindas, datas, local com mapa, categorias com valor, vagas, horário e regra própria, cronograma automático, o que está incluso, Pix com banco e contato. O formulário pede atletas (com Instagram e tamanho de uniforme, se ligado), nome da dupla, responsável, WhatsApp e e-mail, perguntas extras criadas pelo organizador, termos de aceite (aptidão física, uso de imagem e categoria, editáveis) e o comprovante. O organizador vê tudo, soma os tamanhos de uniforme e baixa a planilha (CSV).
 - **Link público ao vivo** e **modo TV** para o telão, com patrocinadores.
 
 Funcionalidades opcionais (cada uma pode ser desligada em **Torneio > Funcionalidades** ou na categoria):

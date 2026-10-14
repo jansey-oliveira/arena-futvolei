@@ -62,16 +62,26 @@ service cloud.firestore {
         allow delete: if isAdmin();
       }
 
+      // Campo de texto opcional com tamanho máximo.
+      function texto(campo, max) {
+        return request.resource.data.get(campo, '') is string && request.resource.data.get(campo, '').size() <= max;
+      }
+
       match /inscricoes/{iid} {
         allow read, update, delete: if isAdmin();
         allow create: if request.auth != null
-          && request.resource.data.keys().hasOnly(['cat', 'j1', 'j2', 'zap', 'status', 'em', 'uid', 'comprovante'])
+          && request.resource.data.keys().hasOnly(['cat', 'j1', 'j2', 'zap', 'status', 'em', 'uid', 'comprovante',
+               'resp', 'email', 'ig1', 'ig2', 'uni1', 'uni2', 'nomeDupla', 'extras', 'aceites'])
           && request.resource.data.status == 'pendente'
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.cat is string && request.resource.data.cat.size() <= 40
           && request.resource.data.j1 is string && request.resource.data.j1.size() <= 60
           && request.resource.data.j2 is string && request.resource.data.j2.size() <= 60
-          && request.resource.data.zap is string && request.resource.data.zap.size() <= 30;
+          && request.resource.data.zap is string && request.resource.data.zap.size() <= 30
+          && texto('resp', 60) && texto('email', 80) && texto('nomeDupla', 60)
+          && texto('ig1', 40) && texto('ig2', 40) && texto('uni1', 30) && texto('uni2', 30)
+          && request.resource.data.get('extras', {}) is map && request.resource.data.get('extras', {}).size() <= 30
+          && request.resource.data.get('aceites', []) is list && request.resource.data.get('aceites', []).size() <= 30;
       }
 
       // Foto do comprovante do Pix (só o organizador vê).

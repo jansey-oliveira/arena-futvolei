@@ -220,14 +220,15 @@ const esperar = async (fn, ms = 8000) => { const t0 = Date.now(); while (!fn() &
 async function criarExemplo() {
   toast('Criando torneio de exemplo…');
   const id = uid();
-  const ini = { ...novaCat(), nome: 'Iniciante', chaves: 3, classificam: 2, extras: 2, vagas: 12, valor: 80, finalSets: true };
-  const mis = { ...novaCat(), nome: 'Misto', vagas: 8, valor: 45, cobranca: 'atleta' };
-  const sor = { ...novaCat(), nome: 'Duplas sorteadas', vagas: 8, valor: 40, cobranca: 'atleta', modoDuplas: 'sorteadas', potes: true };
+  const hoje = new Date().toISOString().slice(0, 10);
+  const ini = { ...novaCat(), nome: 'Iniciante', chaves: 3, classificam: 2, extras: 2, vagas: 12, valor: 80, finalSets: true, dia: hoje, hora: '08:00' };
+  const mis = { ...novaCat(), nome: 'Misto', vagas: 8, valor: 45, cobranca: 'atleta', dia: hoje, hora: '12:00', regra: 'No Misto, o atleta masculino pode ser de nível até Amador C. A partir do 3º saque, o homem pode receber o saque.' };
+  const sor = { ...novaCat(), nome: 'Duplas sorteadas', vagas: 8, valor: 40, cobranca: 'atleta', modoDuplas: 'sorteadas', potes: true, dia: hoje, hora: '15:00' };
   const ats = ['Caio', 'Murilo', 'Renato', 'Fabrício', 'Wesley', 'Alan', 'Pietro', 'Cauã', 'Bento', 'Ravi', 'Theo', 'Yuri'].map((nome, i) => ({ id: uid(), cat: sor.id, nome, pote: i < 6 ? 1 : 2 }));
   const mk = (l, cat, n) => l.map((s, i) => { const [a, b] = s.split(' / '); return { id: uid(), cat, j1: a, j2: b, cabeca: i < n, chave: null }; });
   const ds = [...mk(['Rafa / Tiago', 'Bruno / Caio', 'Lucas / Pedro', 'Igor / Vitor', 'André / Felipe', 'Marcos / Diego', 'Heitor / Davi', 'Gui / Leo', 'João / Enzo', 'Thiago / Nico', 'Samuel / Otávio', 'Breno / Kauã'], ini.id, 3),
     ...mk(['Ana / Paulo', 'Bia / Renan', 'Carla / Edu', 'Duda / Fábio', 'Elis / Gabriel', 'Júlia / Hugo', 'Lara / Ivan', 'Nina / Jorge'], mis.id, 2)];
-  const t = { nome: 'Etapa Verão (exemplo)', data: new Date().toISOString().slice(0, 10), local: 'Arena de exemplo', quadras: ['Quadra 1', 'Quadra 2', 'Quadra 3'], duracao: 20, pix: 'financeiro@exemplo.com.br', pixNome: 'Arena de exemplo', contato: '(11) 90000-0000', inscricoes: true, opcoes: { comprovante: true, desempate: true, patrocinadores: true }, categorias: [ini, mis, sor], duplas: ds, atletas: ats, criado: Date.now(), exemplo: true };
+  const t = { nome: 'Etapa Verão (exemplo)', data: new Date().toISOString().slice(0, 10), local: 'Arena de exemplo', quadras: ['Quadra 1', 'Quadra 2', 'Quadra 3'], duracao: 20, pix: 'financeiro@exemplo.com.br', pixNome: 'Arena de exemplo', contato: '(11) 90000-0000', inscricoes: true, insc: { edicao: '1ª edição', boasVindas: 'Um dia inteiro de futvôlei, competição e resenha na areia.\nPrepare sua dupla e venha fazer parte dessa história!', instagram: '@arenadeexemplo', incluso: 'Troféus\nBrindes\nPremiação\nCobertura fotográfica\nÁgua durante o evento\nFrutas para os atletas', pixBanco: 'Banco de exemplo' }, opcoes: { comprovante: true, desempate: true, patrocinadores: true }, categorias: [ini, mis, sor], duplas: ds, atletas: ats, criado: Date.now(), exemplo: true };
   S.torneios = [{ id, d: t }, ...S.torneios];
   const pats = [['Água de Coco Sol', 'master', 'A água de coco oficial da arena', '@aguadecocosol'], ['Loja da Areia', 'ouro', 'Bolas, viseiras e camisetas', 'lojadaareia.com.br'], ['Academia Ponto Forte', 'apoio', '', '']]
     .map(([nome, cota, frase, link], i) => [`torneios/${id}/patrocinadores/${uid()}`, { nome, cota, frase, link, logo: null, em: Date.now() + i }]);
@@ -261,7 +262,7 @@ async function decidirInsc(id, status) {
   const it = S.insc.find(i => i.id === id); if (!it) return;
   if (status === 'aprovada') {
     if (sorteadas(catById(it.cat))) await saveT({ atletas: [...atletas(), ...[it.j1, it.j2].filter(Boolean).map(nome => ({ id: uid(), cat: it.cat, nome, pote: 1 }))] });
-    else await saveT({ duplas: [...duplas(), { id: uid(), cat: it.cat, j1: it.j1, j2: it.j2, cabeca: false, chave: null }] });
+    else await saveT({ duplas: [...duplas(), { id: uid(), cat: it.cat, j1: it.j1, j2: it.j2, apelido: it.nomeDupla || '', cabeca: false, chave: null }] });
   }
   await updD(`torneios/${S.tid}/inscricoes/${id}`, { status });
   toast(status === 'aprovada' ? (sorteadas(catById(it.cat)) ? 'Inscrição aprovada. O atleta entrou na lista do sorteio.' : 'Inscrição aprovada. A dupla entrou na lista.') : 'Inscrição recusada. A vaga voltou a abrir.');
@@ -567,6 +568,9 @@ function catForm(c, t) {
    <label class="check"><input id="cf-3" name="terceiro" type="checkbox"${c.terceiro ? ' checked' : ''}> Disputa de 3º lugar</label>
    <label class="field"><span>Como as duplas são formadas</span><select id="cf-modo" name="modoDuplas"><option value="fixas"${!sorteadas(c) ? ' selected' : ''}>Duplas fixas (se inscrevem juntas)</option><option value="sorteadas"${sorteadas(c) ? ' selected' : ''}>Duplas sorteadas entre os atletas</option></select></label>
    <label class="check"><input id="cf-potes" name="potes" type="checkbox"${c.potes ? ' checked' : ''}> Sortear com 2 potes (cada dupla tem um atleta de cada pote)</label>
+   <label class="field"><span>Dia da categoria</span><input id="cf-dia" name="dia" type="date" value="${esc(c.dia || '')}"></label>
+   <label class="field"><span>Horário de início</span><input id="cf-hora" name="hora" type="time" value="${esc(c.hora || '')}"></label>
+   <label class="field full"><span>Regra específica da categoria (o atleta precisa aceitar na inscrição)</span><textarea id="cf-regra" name="regra" maxlength="1500" placeholder="Ex.: no Misto Estreante, o atleta masculino pode ser de nível até Amador C.">${esc(c.regra || '')}</textarea></label>
    <label class="check full"><input id="cf-fs" name="finalSets" type="checkbox"${c.finalSets ? ' checked' : ''}> Final em melhor de 3 sets</label>
    ${f('pontosSet', 'Sets da final até (pontos)', c.pontosSet || c.pontos || 18, 'number', 'min="1"')}${f('pontosTie', '3º set até (pontos)', c.pontosTie || 15, 'number', 'min="1"')}
    <fieldset class="full opcoes"><legend>Cor da categoria (usada nos jogos, chaves, telão e placar)</legend><div class="swatches">
@@ -705,34 +709,241 @@ function mesario() {
    <button class="btn" data-act="encerrar"${fim ? '' : ' disabled'}>${!fim ? (md3 ? `${nSet}º set em andamento` : 'Jogo em andamento') : md3 && !decide ? `Fechar ${nSet}º set` : 'Encerrar jogo'}</button></div></div></div>`;
 }
 
+/* ---------- página de inscrição ---------- */
+const TERMOS_PADRAO = [
+  { id: 'apto', titulo: 'Declaração de aptidão física', texto: 'Declaro que não possuo impedimento de ordem médica para a prática de atividade física e esportiva e que estou em condições de saúde compatíveis para participar do torneio.' },
+  { id: 'imagem', titulo: 'Autorização de uso de imagem', texto: 'Autorizo, de forma livre e gratuita, a organização do torneio, seus responsáveis e parceiros a captar e utilizar minha imagem, voz e demais registros audiovisuais feitos durante o evento.' },
+  { id: 'categoria', titulo: 'Desclassificação por incompatibilidade de categoria', texto: 'A escolha da categoria é de responsabilidade da dupla, que deve estar de acordo com seu nível técnico. A organização poderá avaliar as duplas e, constatada incompatibilidade, desclassificá-las a qualquer momento, sem devolução da taxa de inscrição.' },
+];
+const TAMANHOS_PADRAO = 'P, M, G, GG, P feminino, M feminino, G feminino, GG feminino';
+const TIPOS_PERGUNTA = [['curta', 'Resposta curta'], ['longa', 'Parágrafo'], ['unica', 'Escolha uma opção'], ['varias', 'Várias opções']];
+function inscCfg() {
+  return {
+    edicao: '', boasVindas: '', datas: '', instagram: '', incluso: '', pixBanco: '', outrosHorarios: '', aviso: 'A inscrição só é confirmada depois do pagamento.',
+    email: false, instagramAtletas: true, uniforme: true, tamanhos: TAMANHOS_PADRAO, nomeDupla: true,
+    termos: TERMOS_PADRAO, perguntas: [], ...(T()?.insc || {}),
+  };
+}
+const listaTam = cfg => String(cfg.tamanhos || '').split(',').map(s => s.trim()).filter(Boolean);
+const linhas = s => String(s || '').split('\n').map(x => x.trim()).filter(Boolean);
+const igUser = h => String(h || '').trim().replace(/^@+/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/\/.*$/, '');
+const igLink = h => igUser(h) ? 'https://instagram.com/' + igUser(h) : '';
+const mapaLink = l => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(l);
+const horaTxt = h => !h ? '' : h.endsWith(':00') ? h.slice(0, 2).replace(/^0/, '') + 'h' : h.replace(':', 'h').replace(/^0/, '');
+const diaTxt = d => { const p = partesData(d); return p ? `${p.semana} · ${p.dm}` : ''; };
+function cronograma() {
+  const itens = cats().filter(c => c.dia || c.hora).sort((a, b) => ((a.dia || '9') + (a.hora || '')).localeCompare((b.dia || '9') + (b.hora || '')));
+  const dias = []; itens.forEach(c => { let g = dias.find(x => x.dia === (c.dia || '')); if (!g) dias.push(g = { dia: c.dia || '', itens: [] }); g.itens.push(c); });
+  return dias;
+}
+const precoTxt = c => `${brl(c.valor)} ${c.cobranca === 'atleta' ? 'por atleta' : 'por dupla'}`;
+
+function paginaInscricao() {
+  const t = T(), cfg = inscCfg(), d = partesData(t.data), crono = cronograma();
+  if (S.inscOk && S.inscOk.tid === S.tid) return inscConfirmada(S.inscOk);
+  const eb = [cfg.edicao, t.local].filter(Boolean).map(esc).join(' · ');
+  const quando = cfg.datas || (d ? `${d.semana}, ${d.dm.replace('.', '/')} de ${d.mes} de ${d.ano}` : '');
+  const cardsCat = cats().map(c => {
+    const v = vagasCat(c), quandoCat = [diaTxt(c.dia), horaTxt(c.hora)].filter(Boolean).join(' · ');
+    return `<div class="ins-cat" style="${estCat(c)}"><div class="row between" style="gap:8px"><h4>${esc(c.nome)}</h4>${v ? `<span class="chip">${v} ${sorteadas(c) ? (v === 1 ? 'vaga de atleta' : 'vagas de atleta') : (v === 1 ? 'vaga' : 'vagas')}</span>` : '<span class="chip">esgotada</span>'}</div>
+      <b class="preco">${precoTxt(c)}</b>
+      ${quandoCat ? `<span class="small muted">${esc(quandoCat)}</span>` : ''}
+      ${sorteadas(c) ? '<span class="small muted">Inscrição individual: as duplas são sorteadas.</span>' : ''}
+      ${c.regra ? `<details class="small"><summary>Regra da categoria</summary><p style="margin:6px 0 0">${esc(c.regra)}</p></details>` : ''}</div>`;
+  }).join('');
+  const pix = t.pix ? `<div class="pix"><div style="flex:1;min-width:0"><div class="eyebrow">Pix${t.pixNome ? ' · ' + esc(t.pixNome) : ''}${cfg.pixBanco ? ' · ' + esc(cfg.pixBanco) : ''}</div><code id="pixk">${esc(t.pix)}</code></div><button type="button" class="btn sm" data-act="copiarPix">Copiar chave Pix</button></div>` : '<p class="small muted" style="margin:0">O organizador ainda não informou a chave Pix.</p>';
+  return `<div class="stack ins">
+  <section class="ins-hero">
+    <div class="eyebrow">${eb || 'Inscrições'}</div>
+    <h1 class="tit">${esc(t.nome)}</h1>
+    <div class="ins-info">
+      ${quando ? `<div><span class="eyebrow">Data</span><b>${esc(quando)}</b></div>` : ''}
+      ${t.local ? `<div><span class="eyebrow">Local</span><b>${esc(t.local)}</b><a class="link small" href="${mapaLink(t.local)}" target="_blank" rel="noopener">Ver no mapa</a></div>` : ''}
+      ${cfg.instagram ? `<div><span class="eyebrow">Dúvidas</span><b>@${esc(igUser(cfg.instagram))}</b><a class="link small" href="${igLink(cfg.instagram)}" target="_blank" rel="noopener">Abrir Instagram</a></div>` : ''}
+      ${t.contato ? `<div><span class="eyebrow">WhatsApp</span><b style="user-select:all">${esc(t.contato)}</b></div>` : ''}
+    </div>
+    ${cfg.boasVindas ? `<div class="ins-texto">${linhas(cfg.boasVindas).map(l => `<p>${esc(l)}</p>`).join('')}</div>` : ''}
+  </section>
+
+  <section class="ins-sec"><h3>Categorias</h3><div class="ins-cats">${cardsCat || '<p class="muted">As categorias ainda não foram cadastradas.</p>'}</div></section>
+
+  ${crono.length || cfg.outrosHorarios ? `<section class="ins-sec"><h3>Cronograma</h3><div class="crono">
+    ${crono.map(g => `<div class="dia"><div class="eyebrow">${esc(diaTxt(g.dia) || 'Data a definir')}</div>${g.itens.map(c => `<div class="it" style="${estCat(c)}"><b class="num">${esc(horaTxt(c.hora) || '—')}</b><span class="cat-tag">${esc(c.nome)}</span></div>`).join('')}</div>`).join('')}
+    ${cfg.outrosHorarios ? `<div class="dia"><div class="eyebrow">Também na programação</div>${linhas(cfg.outrosHorarios).map(l => `<div class="it"><span>${esc(l)}</span></div>`).join('')}</div>` : ''}
+  </div></section>` : ''}
+
+  ${cfg.incluso ? `<section class="ins-sec"><h3>O que está incluso</h3><ul class="incluso">${linhas(cfg.incluso).map(l => `<li>${esc(l)}</li>`).join('')}</ul></section>` : ''}
+
+  ${!t.inscricoes ? '<div class="panel muted">As inscrições deste torneio estão fechadas.</div>' : formInscricao(cfg, pix)}
+  </div>`;
+}
+
+function formInscricao(cfg, pix) {
+  const tam = listaTam(cfg), selTam = (id, n) => `<label class="field"><span>Uniforme</span><select id="${id}" name="${n}" required><option value="">Escolha o tamanho</option>${tam.map(x => `<option>${esc(x)}</option>`).join('')}</select></label>`;
+  const atleta = (n, extra = '') => `<fieldset class="ins-atleta" id="in-a${n}"${extra}><legend>Atleta ${n}</legend><div class="form">
+      <label class="field"><span id="in-${n}-l">Nome completo</span><input id="in-${n}" name="j${n}" type="text" maxlength="60" required autocomplete="off"></label>
+      ${cfg.instagramAtletas ? `<label class="field"><span>Instagram</span><input id="in-ig${n}" name="ig${n}" type="text" maxlength="40" placeholder="@usuario" required autocapitalize="off"></label>` : ''}
+      ${cfg.uniforme && tam.length ? selTam('in-u' + n, 'uni' + n) : ''}
+    </div></fieldset>`;
+  const pergunta = p => {
+    const req = p.obrig ? ' required' : '', nome = 'q_' + p.id, ops = String(p.opcoes || '').split(',').map(s => s.trim()).filter(Boolean);
+    const rot = `<span>${esc(p.texto)}${p.obrig ? '' : ' (opcional)'}</span>`;
+    if (p.tipo === 'longa') return `<label class="field full">${rot}<textarea id="iq-${p.id}" name="${nome}" maxlength="600"${req}></textarea></label>`;
+    if (p.tipo === 'unica') return `<fieldset class="field full ins-ops"><legend>${esc(p.texto)}${p.obrig ? '' : ' (opcional)'}</legend>${ops.map((o, k) => `<label class="check"><input id="iq-${p.id}-${k}" type="radio" name="${nome}" value="${esc(o)}"${req}> ${esc(o)}</label>`).join('')}</fieldset>`;
+    if (p.tipo === 'varias') return `<fieldset class="field full ins-ops" data-varias="${p.id}"${p.obrig ? ' data-obrig="1"' : ''}><legend>${esc(p.texto)}${p.obrig ? '' : ' (opcional)'}</legend>${ops.map((o, k) => `<label class="check"><input id="iq-${p.id}-${k}" type="checkbox" name="${nome}" value="${esc(o)}"> ${esc(o)}</label>`).join('')}</fieldset>`;
+    return `<label class="field full">${rot}<input id="iq-${p.id}" name="${nome}" type="text" maxlength="200"${req}></label>`;
+  };
+  let n = 0; const passo = (titulo, corpo, attrs = '') => `<section class="ins-passo"${attrs}><h3><span class="num">${String(++n).padStart(2, '0')}</span>${titulo}</h3>${corpo}</section>`;
+  return `<form class="panel ins-form" data-form="insc">
+    <div class="sect-head"><div><div class="eyebrow">Formulário</div><h2>Faça sua inscrição</h2></div><span class="small muted">* todos os campos são obrigatórios, exceto os marcados como opcionais</span></div>
+    ${passo('Categoria', `<div class="ins-opcoes">${cats().map(c => { const v = vagasCat(c); return `<label class="ins-opt" style="${estCat(c)}"><input type="radio" name="cat" value="${c.id}" data-change="inscCat"${v ? '' : ' disabled'} required><span><b>${esc(c.nome)}</b><small>${precoTxt(c)}${v ? '' : ' · esgotada'}</small></span></label>`; }).join('')}</div>
+      <p class="small muted" id="in-ind" hidden style="margin:0">Nesta categoria as duplas são sorteadas entre os atletas. Inscreva só você.</p>`)}
+    ${passo('Atletas', `${atleta(1)}${atleta(2)}
+      ${cfg.nomeDupla ? `<label class="field" id="in-nd-w"><span>Nome da dupla (opcional)</span><input id="in-nd" name="nomeDupla" type="text" maxlength="60" placeholder="Como vocês querem aparecer no telão"></label>` : ''}`)}
+    ${passo('Contato', `<div class="form">
+      <label class="field"><span>Nome do responsável pela inscrição</span><input id="in-r" name="resp" type="text" maxlength="60" required></label>
+      <label class="field"><span>WhatsApp</span><input id="in-z" name="zap" type="tel" maxlength="30" required placeholder="(11) 90000-0000"></label>
+      ${cfg.email ? '<label class="field"><span>E-mail</span><input id="in-e" name="email" type="email" maxlength="80" required></label>' : ''}
+    </div>`)}
+    ${(cfg.perguntas || []).length ? passo('Perguntas', `<div class="form">${cfg.perguntas.map(pergunta).join('')}</div>`) : ''}
+    ${passo('Regras e termos', `<div class="stack" style="gap:12px">
+      ${cats().filter(c => c.regra).map(c => `<div class="termo" data-regra="${c.id}" hidden style="${estCat(c)}"><b class="cat-tag">Regra · ${esc(c.nome)}</b><p>${esc(c.regra)}</p><label class="check"><input id="in-rg-${c.id}" type="checkbox" name="aceite" value="regra" required disabled> Li e concordo com a regra da categoria</label></div>`).join('')}
+      ${(cfg.termos || []).map(tm => `<div class="termo"><b>${esc(tm.titulo)}</b><p>${esc(tm.texto)}</p><label class="check"><input id="in-t-${tm.id}" type="checkbox" name="aceite" value="${esc(tm.id)}" required> Li e aceito</label></div>`).join('') || '<p class="small muted" style="margin:0">Sem termos para aceitar.</p>'}
+    </div>`)}
+    ${passo('Pagamento', `<div class="stack" style="gap:12px"><div id="in-valor" class="ins-valor small muted">Escolha a categoria para ver o valor.</div>${pix}
+      ${opt('comprovante') ? '<label class="field"><span>Comprovante do Pix (foto ou print)</span><input id="in-f" name="foto" type="file" accept="image/*" required></label>' : `<p class="small muted" style="margin:0">Envie o comprovante ao organizador${T().contato ? ' pelo WhatsApp ' + esc(T().contato) : ''}.</p>`}
+      ${cfg.aviso ? `<p class="dica" style="margin:0">${esc(cfg.aviso)}</p>` : ''}</div>`)}
+    <div class="row between"><button class="btn" id="in-enviar">Enviar inscrição</button><span class="small muted" id="in-erro" role="alert"></span></div>
+  </form>`;
+}
+
+/** Ajusta o formulário à categoria escolhida: individual ou dupla, regra específica e valor. */
+function ajustarFormInsc(cid) {
+  const c = catById(cid), ind = sorteadas(c);
+  const a2 = $('#in-a2'); if (a2) { a2.hidden = ind; a2.querySelectorAll('input,select').forEach(el => { el.disabled = ind; }); }
+  const nd = $('#in-nd-w'); if (nd) nd.hidden = ind;
+  const l1 = $('#in-1-l'); if (l1) l1.textContent = ind ? 'Seu nome completo' : 'Nome completo';
+  const a1 = $('#in-a1 legend'); if (a1) a1.textContent = ind ? 'Atleta' : 'Atleta 1';
+  if ($('#in-ind')) $('#in-ind').hidden = !ind;
+  document.querySelectorAll('[data-regra]').forEach(b => { const on = b.dataset.regra === cid; b.hidden = !on; b.querySelector('input').disabled = !on; });
+  const v = $('#in-valor');
+  if (v && c) { const total = c.cobranca === 'atleta' && !ind ? c.valor * 2 : c.valor; v.innerHTML = `<b style="color:var(--ink);font-size:1.1rem">${brl(total)}</b> · ${esc(c.nome)}${c.cobranca === 'atleta' && !ind ? ` (${brl(c.valor)} por atleta)` : ''}`; }
+}
+
+function inscConfirmada(r) {
+  const c = catById(r.cat);
+  return `<div class="stack ins"><section class="panel ins-ok stack" style="${estCat(c)}">
+    ${logoHTML(marca(), '96px', 'var(--cat)')}
+    <div class="eyebrow">Inscrição recebida</div><h2>Tudo certo, ${esc(r.resp.split(' ')[0] || r.j1)}!</h2>
+    <p style="margin:0">A inscrição de <b>${esc(r.j2 ? `${r.j1} / ${r.j2}` : r.j1)}</b> na categoria <b class="cat-tag">${esc(c?.nome || '')}</b> foi enviada.
+    ${r.comprovante ? 'O organizador vai conferir o comprovante e aprovar.' : 'Envie o comprovante ao organizador para confirmar.'}</p>
+    ${inscCfg().aviso ? `<p class="dica" style="margin:0">${esc(inscCfg().aviso)}</p>` : ''}
+    <div class="row"><button class="btn ghost" data-act="novaInsc">Fazer outra inscrição</button><button class="btn ghost" data-act="tab" data-k="painel">Ver o torneio</button></div>
+  </section></div>`;
+}
+
+/* ---------- inscrições: visão do organizador ---------- */
+const STATUS_TXT = { pendente: 'pendente', aprovada: 'aprovada', recusada: 'recusada' };
+function insDetalhe(i, cfg) {
+  const c = catById(i.cat), ex = i.extras || {};
+  const at = (n) => { const nm = i['j' + n]; if (!nm) return ''; const ig = i['ig' + n], un = i['uni' + n]; return `<div><b>${esc(nm)}</b>${ig ? ` · <a class="link" href="${igLink(ig)}" target="_blank" rel="noopener">@${esc(igUser(ig))}</a>` : ''}${un ? ` · <span class="chip">${esc(un)}</span>` : ''}</div>`; };
+  const perg = (cfg.perguntas || []).filter(p => ex[p.id]).map(p => `<div><span class="muted">${esc(p.texto)}:</span> ${esc(ex[p.id])}</div>`).join('');
+  return `<div class="ins-item" style="${estCat(c)}">
+    <div class="row between" style="gap:8px"><div style="min-width:0"><b class="cat-tag">${esc(c?.nome || '')}</b>${i.nomeDupla ? ` · <b>${esc(i.nomeDupla)}</b>` : ''}</div><span class="small muted">${new Date(i.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span></div>
+    <div class="ins-at">${at(1)}${at(2)}</div>
+    <div class="small"><span class="muted">Responsável:</span> ${esc(i.resp || '—')} · <span style="user-select:all">${esc(i.zap)}</span>${i.email ? ` · <span style="user-select:all">${esc(i.email)}</span>` : ''}</div>
+    ${perg ? `<div class="small stack" style="gap:2px">${perg}</div>` : ''}
+    ${i.aceites?.length ? `<div class="small muted">Aceitou ${i.aceites.length} ${i.aceites.length === 1 ? 'termo' : 'termos'}.</div>` : ''}
+    <div class="row">${i.comprovante ? `<button class="btn ghost sm" data-act="verComp" data-id="${i.id}">Ver comprovante</button>` : '<span class="small muted">sem comprovante</span>'}
+      ${i.status === 'pendente' ? `<button class="btn sm" data-act="insc" data-id="${i.id}" data-s="aprovada">Aprovar</button><button class="btn ghost sm" data-act="insc" data-id="${i.id}" data-s="recusada">Recusar</button>` : `<span class="chip ${i.status === 'aprovada' ? 'ok' : ''}">${STATUS_TXT[i.status] || i.status}</span>`}</div>
+  </div>`;
+}
+function resumoUniformes() {
+  const cont = {}; S.insc.filter(i => i.status !== 'recusada').forEach(i => ['uni1', 'uni2'].forEach(k => { if (i[k]) cont[i[k]] = (cont[i[k]] || 0) + 1; }));
+  const ord = listaTam(inscCfg()); const ks = Object.keys(cont).sort((a, b) => (ord.indexOf(a) + 1 || 99) - (ord.indexOf(b) + 1 || 99));
+  return ks.length ? `<section class="panel stack" style="gap:10px"><h3>Uniformes</h3><div class="row">${ks.map(k => `<span class="uni"><b class="num">${cont[k]}</b>${esc(k)}</span>`).join('')}</div><p class="small muted" style="margin:0">Soma das inscrições pendentes e aprovadas.</p></section>` : '';
+}
+function csvInscricoes() {
+  const cfg = inscCfg(), q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const cab = ['Data', 'Status', 'Categoria', 'Nome da dupla', 'Atleta 1', 'Instagram 1', 'Uniforme 1', 'Atleta 2', 'Instagram 2', 'Uniforme 2', 'Responsável', 'WhatsApp', 'E-mail', ...(cfg.perguntas || []).map(p => p.texto), 'Comprovante'];
+  const lin = [...S.insc].sort((a, b) => a.em - b.em).map(i => [new Date(i.em).toLocaleString('pt-BR'), i.status, catById(i.cat)?.nome || '', i.nomeDupla, i.j1, i.ig1, i.uni1, i.j2, i.ig2, i.uni2, i.resp, i.zap, i.email, ...(cfg.perguntas || []).map(p => (i.extras || {})[p.id]), i.comprovante ? 'sim' : 'não']);
+  const txt = '﻿' + [cab, ...lin].map(r => r.map(q).join(';')).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'text/csv;charset=utf-8' }));
+  a.download = `inscricoes-${(T().nome || 'torneio').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-')}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function configInscHTML() {
+  const cfg = inscCfg(), ck = (n, l) => `<label class="check"><input id="ic-${n}" type="checkbox" name="${n}"${cfg[n] ? ' checked' : ''}> ${l}</label>`;
+  return `<form class="stack" data-form="inscCfg">
+    <section class="panel form"><h3 class="full">Apresentação</h3>
+      <label class="field"><span>Edição</span><input id="ic-edicao" name="edicao" type="text" maxlength="40" value="${esc(cfg.edicao)}" placeholder="1ª edição"></label>
+      <label class="field"><span>Datas (texto livre)</span><input id="ic-datas" name="datas" type="text" maxlength="80" value="${esc(cfg.datas)}" placeholder="13, 14 e 15 de novembro"></label>
+      <label class="field"><span>Instagram para dúvidas</span><input id="ic-ig" name="instagram" type="text" maxlength="40" value="${esc(cfg.instagram)}" placeholder="@seutorneio"></label>
+      <label class="field"><span>Banco do Pix (opcional)</span><input id="ic-banco" name="pixBanco" type="text" maxlength="40" value="${esc(cfg.pixBanco)}" placeholder="C6 Bank"></label>
+      <label class="field full"><span>Boas-vindas (aparece no topo da página)</span><textarea id="ic-bv" name="boasVindas" maxlength="1200" placeholder="Serão 3 dias de muito futvôlei…">${esc(cfg.boasVindas)}</textarea></label>
+      <label class="field"><span>O que está incluso (um por linha)</span><textarea id="ic-inc" name="incluso" maxlength="1200" placeholder="Troféus&#10;Brindes&#10;Cobertura fotográfica">${esc(cfg.incluso)}</textarea></label>
+      <label class="field"><span>Outros horários do cronograma (um por linha)</span><textarea id="ic-oh" name="outrosHorarios" maxlength="800" placeholder="Domingo 15h · Professor Arena">${esc(cfg.outrosHorarios)}</textarea></label>
+      <label class="field full"><span>Aviso final</span><input id="ic-aviso" name="aviso" type="text" maxlength="160" value="${esc(cfg.aviso)}"></label>
+      <p class="dica full" style="margin:0">Data, local, Pix e WhatsApp vêm da aba Torneio. O horário e a regra de cada categoria ficam em Categorias &gt; Editar e formam o cronograma automaticamente.</p>
+    </section>
+    <section class="panel stack" style="gap:12px"><h3>Campos do formulário</h3>
+      ${ck('instagramAtletas', 'Pedir o Instagram de cada atleta')}
+      ${ck('uniforme', 'Pedir o tamanho do uniforme de cada atleta')}
+      <label class="field"><span>Tamanhos de uniforme (separados por vírgula)</span><input id="ic-tam" name="tamanhos" type="text" maxlength="200" value="${esc(cfg.tamanhos)}"></label>
+      ${ck('nomeDupla', 'Pedir o nome da dupla (opcional para o atleta)')}
+      ${ck('email', 'Pedir e-mail do responsável')}
+      <p class="small muted" style="margin:0">Nome dos atletas, nome do responsável e WhatsApp são sempre pedidos.</p>
+    </section>
+    <section class="panel stack" style="gap:12px"><h3>Perguntas extras</h3>
+      ${(cfg.perguntas || []).map((p, k) => `<div class="ed-item" data-pergunta="${esc(p.id)}"><div class="form">
+        <label class="field full"><span>Pergunta ${k + 1}</span><input id="ip-t-${p.id}" data-p="texto" type="text" maxlength="160" value="${esc(p.texto)}"></label>
+        <label class="field"><span>Tipo</span><select id="ip-k-${p.id}" data-p="tipo">${TIPOS_PERGUNTA.map(([v, l]) => `<option value="${v}"${p.tipo === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="field"><span>Opções (separadas por vírgula)</span><input id="ip-o-${p.id}" data-p="opcoes" type="text" maxlength="400" value="${esc(p.opcoes || '')}" placeholder="Só para escolha de opções"></label>
+        <div class="row full between"><label class="check"><input id="ip-r-${p.id}" data-p="obrig" type="checkbox"${p.obrig ? ' checked' : ''}> Obrigatória</label><button type="button" class="link small" data-act="perguntaMenos" data-id="${esc(p.id)}">Remover pergunta</button></div>
+      </div></div>`).join('') || '<p class="small muted" style="margin:0">Nenhuma pergunta extra. Exemplos: "Cidade", "Nível da dupla", "Precisa de recibo?".</p>'}
+      <button type="button" class="link small" data-act="perguntaMais" style="align-self:flex-start">Adicionar pergunta</button>
+    </section>
+    <section class="panel stack" style="gap:12px"><h3>Termos de aceite</h3>
+      ${(cfg.termos || []).map((tm, k) => `<div class="ed-item" data-termo="${esc(tm.id)}"><div class="form">
+        <label class="field full"><span>Título do termo ${k + 1}</span><input id="it-t-${tm.id}" data-t="titulo" type="text" maxlength="100" value="${esc(tm.titulo)}"></label>
+        <label class="field full"><span>Texto</span><textarea id="it-x-${tm.id}" data-t="texto" maxlength="1500">${esc(tm.texto)}</textarea></label>
+        <div class="full"><button type="button" class="link small" data-act="termoMenos" data-id="${esc(tm.id)}">Remover termo</button></div>
+      </div></div>`).join('') || '<p class="small muted" style="margin:0">Nenhum termo.</p>'}
+      <div class="row"><button type="button" class="link small" data-act="termoMais">Adicionar termo</button><button type="button" class="link small" data-act="termosPadrao">Restaurar os 3 termos padrão</button></div>
+    </section>
+    <div class="row"><button class="btn">Salvar página de inscrição</button><button type="button" class="btn ghost" data-act="inscAba" data-k="previa">Ver como o atleta</button></div>
+  </form>`;
+}
+function lerInscCfg() {
+  const f = document.querySelector('form[data-form="inscCfg"]'); const cfg = inscCfg(); if (!f) return cfg;
+  const g = n => f.querySelector(`[name="${n}"]`);
+  ['edicao', 'datas', 'instagram', 'pixBanco', 'boasVindas', 'incluso', 'outrosHorarios', 'aviso', 'tamanhos'].forEach(n => { cfg[n] = String(g(n)?.value || '').trim(); });
+  ['instagramAtletas', 'uniforme', 'nomeDupla', 'email'].forEach(n => { cfg[n] = !!g(n)?.checked; });
+  cfg.perguntas = [...f.querySelectorAll('[data-pergunta]')].map(el => ({ id: el.dataset.pergunta, texto: el.querySelector('[data-p=texto]').value.trim() || 'Pergunta', tipo: el.querySelector('[data-p=tipo]').value, opcoes: el.querySelector('[data-p=opcoes]').value.trim(), obrig: el.querySelector('[data-p=obrig]').checked }));
+  cfg.termos = [...f.querySelectorAll('[data-termo]')].map(el => ({ id: el.dataset.termo, titulo: el.querySelector('[data-t=titulo]').value.trim() || 'Termo', texto: el.querySelector('[data-t=texto]').value.trim() }));
+  return cfg;
+}
+
 function inscricao() {
   const t = T();
-  const pixBox = t.pix ? `<div class="pix"><span class="small muted">Pix${t.pixNome ? ' · ' + esc(t.pixNome) : ''}</span><code id="pixk">${esc(t.pix)}</code><button type="button" class="btn sm" data-act="copiarPix">Copiar chave Pix</button></div>` : '<p class="small muted">O organizador ainda não informou a chave Pix.</p>';
-  const primeira = cats().find(c => vagasCat(c)) || cats()[0]; const ind = sorteadas(primeira);
-  const form = !t.inscricoes ? '<div class="panel muted">As inscrições deste torneio estão fechadas.</div>' :
-    `<form class="panel form" data-form="insc"><h3 class="full" id="in-tit">${ind ? 'Inscrição individual' : 'Inscrever dupla'}</h3>
-    <label class="field full"><span>Categoria</span><select id="in-cat" name="cat" data-change="inscCat" required>${cats().map(c => { const v = vagasCat(c); return `<option value="${c.id}"${v ? '' : ' disabled'}>${esc(c.nome)} · ${brl(c.valor)}/${c.cobranca} · ${v ? v + (sorteadas(c) ? (v === 1 ? ' vaga de atleta' : ' vagas de atleta') : ' vagas restantes') : 'esgotada'}</option>`; }).join('')}</select></label>
-    <label class="field"><span id="in-1-l">${ind ? 'Nome do atleta' : 'Atleta 1'}</span><input id="in-1" name="j1" type="text" maxlength="60" required></label>
-    <label class="field" id="in-2-w"${ind ? ' hidden' : ''}><span>Atleta 2</span><input id="in-2" name="j2" type="text" maxlength="60"${ind ? '' : ' required'}></label>
-    <p class="full small muted" id="in-ind" style="margin:0"${ind ? '' : ' hidden'}>Nesta categoria as duplas são sorteadas entre os atletas inscritos. Inscreva só você.</p>
-    <label class="field full"><span>WhatsApp para contato</span><input id="in-z" name="zap" type="tel" maxlength="30" required placeholder="(11) 90000-0000"></label>
-    <div class="full">${pixBox}</div>
-    ${opt('comprovante') ? `<label class="field full"><span>Comprovante do Pix (foto ou print)</span><input id="in-f" name="foto" type="file" accept="image/*" required></label>
-    <p class="full small muted" style="margin:0">Faça o Pix, anexe o comprovante e envie. A inscrição vale depois da aprovação do organizador.</p>` :
-    `<p class="full small muted" style="margin:0">Faça o Pix e envie o comprovante ao organizador${t.contato ? ' pelo WhatsApp ' + esc(t.contato) : ''}. A inscrição vale depois da aprovação.</p>`}
-    <div class="full"><button class="btn">Enviar inscrição</button></div></form>`;
-  const chipI = s => s === 'aprovada' ? '<span class="chip ok">aprovada</span>' : s === 'recusada' ? '<span class="chip">recusada</span>' : '<span class="chip sea">pendente</span>';
-  if (S.org) {
-    const pend = S.insc.filter(i => i.status === 'pendente'), dec = S.insc.filter(i => i.status !== 'pendente');
-    return `<div class="stack"><div class="sect-head"><div><h2>Inscrições</h2><p class="muted small" style="margin:0">${t.inscricoes ? 'Abertas' : 'Fechadas'} · ${pend.length} pendentes · ${dec.filter(i => i.status === 'aprovada').length} aprovadas · ${dec.filter(i => i.status === 'recusada').length} recusadas</p></div><button class="btn ghost sm" data-act="copiar" data-k="inscricao">Copiar link de inscrição</button></div>
-    <section class="panel"><div class="games">${pend.map(i => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto"><div class="t"><b>${esc(nomeInsc(i))}</b><div class="small muted">${esc(catById(i.cat)?.nome || '')} · ${brl(catById(i.cat)?.valor)} · ${hora(i.em)} · WhatsApp <span style="user-select:all">${esc(i.zap)}</span></div></div>
-      <div class="row">${i.comprovante ? `<button class="btn ghost sm" data-act="verComp" data-id="${i.id}">Ver comprovante</button>` : '<span class="small muted">sem comprovante</span>'}<button class="btn sm" data-act="insc" data-id="${i.id}" data-s="aprovada">Aprovar</button><button class="btn ghost sm" data-act="insc" data-id="${i.id}" data-s="recusada">Recusar</button></div></div>`).join('') || '<p class="muted">Nenhuma inscrição pendente.</p>'}</div></section>
-    ${dec.length ? `<section class="panel"><h3>Já decididas</h3><div class="games">${dec.map(i => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto"><div class="t">${esc(nomeInsc(i))} <span class="small muted">· ${esc(catById(i.cat)?.nome || '')}</span></div>${chipI(i.status)}</div>`).join('')}</div></section>` : ''}
-    <details class="panel"><summary class="small" style="cursor:pointer">Ver o formulário como os atletas veem</summary><div style="margin-top:12px">${form}</div></details></div>`;
+  if (!S.org) {
+    const minhas = lsGet('minhas', []).filter(i => i.tid === S.tid);
+    const chipI = s => s === 'aprovada' ? '<span class="chip ok">aprovada</span>' : '<span class="chip sea">aguardando</span>';
+    return paginaInscricao() + (minhas.length && !S.inscOk ? `<section class="panel" style="margin-top:22px"><h3>Inscrições enviadas deste aparelho</h3><div class="games">${minhas.map(i => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto"><div class="t">${esc(nomeInsc(i))} <span class="small muted">· ${esc(catById(i.cat)?.nome || '')}</span></div>${chipI((sorteadas(catById(i.cat)) ? atletas().some(a => a.cat === i.cat && a.nome === i.j1) : duplas().some(d => d.cat === i.cat && d.j1 === i.j1 && d.j2 === i.j2)) ? 'aprovada' : '')}</div>`).join('')}</div></section>` : '');
   }
-  const minhas = lsGet('minhas', []).filter(i => i.tid === S.tid);
-  return `<div class="stack"><div><div class="label">${esc(dataBR(t.data))}${t.local ? ' · ' + esc(t.local) : ''}</div><h2>Inscrição · ${esc(t.nome)}</h2></div>${form}
-  ${minhas.length ? `<section class="panel"><h3>Inscrições enviadas deste aparelho</h3><div class="games">${minhas.map(i => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto"><div class="t">${esc(nomeInsc(i))} <span class="small muted">· ${esc(catById(i.cat)?.nome || '')}</span></div>${(sorteadas(catById(i.cat)) ? atletas().some(a => a.cat === i.cat && a.nome === i.j1) : duplas().some(d => d.cat === i.cat && d.j1 === i.j1 && d.j2 === i.j2)) ? chipI('aprovada') : '<span class="chip sea">aguardando</span>'}</div>`).join('')}</div></section>` : ''}</div>`;
+  const aba = S.inscAba || 'recebidas', cfg = inscCfg();
+  const pend = S.insc.filter(i => i.status === 'pendente'), apr = S.insc.filter(i => i.status === 'aprovada'), rec = S.insc.filter(i => i.status === 'recusada');
+  const abas = [['recebidas', `Recebidas (${S.insc.length})`], ['pagina', 'Configurar página'], ['previa', 'Ver como o atleta']];
+  let corpo = '';
+  if (aba === 'pagina') corpo = configInscHTML();
+  else if (aba === 'previa') corpo = `<p class="dica" style="margin:0">Prévia: é assim que os atletas veem a página. Enviar por aqui cria uma inscrição de verdade.</p>${paginaInscricao()}`;
+  else corpo = `<div class="panel stats"><div class="stat"><b class="num">${pend.length}</b><span class="label">pendentes</span></div><div class="stat"><b class="num">${apr.length}</b><span class="label">aprovadas</span></div><div class="stat"><b class="num">${rec.length}</b><span class="label">recusadas</span></div><div class="stat"><b class="num">${brl(apr.reduce((s, i) => { const c = catById(i.cat); return s + (c ? (c.cobranca === 'atleta' && i.j2 ? c.valor * 2 : c.valor) : 0); }, 0))}</b><span class="label">valor aprovado</span></div></div>
+    ${resumoUniformes()}
+    <section class="panel stack" style="gap:12px"><h3>Pendentes</h3>${pend.map(i => insDetalhe(i, cfg)).join('') || '<p class="muted" style="margin:0">Nenhuma inscrição pendente.</p>'}</section>
+    ${apr.length + rec.length ? `<details class="panel"><summary class="small" style="cursor:pointer">Já decididas (${apr.length + rec.length})</summary><div class="stack" style="gap:12px;margin-top:12px">${[...apr, ...rec].map(i => insDetalhe(i, cfg)).join('')}</div></details>` : ''}`;
+  return `<div class="stack"><div class="sect-head"><div><div class="eyebrow">${t.inscricoes ? 'Inscrições abertas' : 'Inscrições fechadas'}</div><h2>Inscrições</h2></div>
+    <div class="row"><button class="btn ghost sm" data-act="copiar" data-k="inscricao">Copiar link de inscrição</button>${S.insc.length ? '<button class="btn ghost sm" data-act="baixarCsv">Baixar planilha</button>' : ''}</div></div>
+    <div class="subabas" role="tablist">${abas.map(([k, l]) => `<button role="tab" data-act="inscAba" data-k="${k}" aria-selected="${aba === k}">${l}</button>`).join('')}</div>
+    ${corpo}</div>`;
 }
 
 /* ---------- modo TV ---------- */
@@ -787,7 +998,7 @@ async function copiar(txt) {
 /* ---------- eventos ---------- */
 const jogoAoVivo = () => S.jogos.find(x => x.status === 'aovivo' && x.quadra === S.quadra);
 const ACT = {
-  tab: d => { if (d.k === 'tv') { abrirTV(); return; } if (S.tab === 'marca' && d.k !== 'marca') S.rascunho = null; S.tab = d.k; S.editJogo = null; S.editCat = null; history.replaceState(null, '', location.pathname + location.search + (d.k === 'painel' ? '' : '#' + d.k)); render(); window.scrollTo(0, 0); },
+  tab: d => { if (d.k === 'tv') { abrirTV(); return; } S.inscOk = null; if (S.tab === 'marca' && d.k !== 'marca') S.rascunho = null; S.tab = d.k; S.editJogo = null; S.editCat = null; history.replaceState(null, '', location.pathname + location.search + (d.k === 'painel' ? '' : '#' + d.k)); render(); window.scrollTo(0, 0); },
   entrar: async () => { const p = new GoogleAuthProvider(); try { await signInWithPopup(auth, p); } catch (e) { if (String(e.code).includes('popup-blocked')) await signInWithRedirect(auth, p); else erro(e); } },
   sair: () => signOut(auth).then(() => toast('Você saiu.')),
   novoT: () => { S.novoT = true; render(); }, novoT2: () => { S.novoT = !S.novoT; render(); }, cancelNovo: () => { S.novoT = false; render(); },
@@ -834,6 +1045,14 @@ const ACT = {
     toast('Novo link de mesário gerado.');
   }),
   insc: d => decidirInsc(d.id, d.s),
+  inscAba: d => { if (S.inscAba === 'pagina' && d.k !== 'pagina') S.inscRasc = null; S.inscAba = d.k; S.inscOk = null; render(); },
+  novaInsc: () => { S.inscOk = null; render(); window.scrollTo(0, 0); },
+  baixarCsv: () => csvInscricoes(),
+  perguntaMais: () => { const c = lerInscCfg(); c.perguntas = [...c.perguntas, { id: 'p' + uid().slice(0, 6), texto: '', tipo: 'curta', opcoes: '', obrig: true }]; saveT({ insc: c }); render(); },
+  perguntaMenos: d => { const c = lerInscCfg(); c.perguntas = c.perguntas.filter(p => p.id !== d.id); saveT({ insc: c }); render(); },
+  termoMais: () => { const c = lerInscCfg(); c.termos = [...c.termos, { id: 't' + uid().slice(0, 6), titulo: '', texto: '' }]; saveT({ insc: c }); render(); },
+  termoMenos: d => { const c = lerInscCfg(); c.termos = c.termos.filter(x => x.id !== d.id); saveT({ insc: c }); render(); },
+  termosPadrao: () => { const c = lerInscCfg(); c.termos = [...c.termos.filter(x => !TERMOS_PADRAO.some(p => p.id === x.id)), ...TERMOS_PADRAO]; saveT({ insc: c }); render(); toast('Termos padrão restaurados.'); },
   modeloMarca: d => { const atual = S.rascunho || {}; S.rascunho = JSON.parse(JSON.stringify(MK.MODELOS[d.k])); if (!S.rascunho.logo && atual.logo && atual.logo.startsWith('data:')) { S.rascunho.logo = atual.logo; S.rascunho.logoTinta = atual.logoTinta; } render(); },
   semLogo: () => { S.rascunho = { ...lerMarcaDoForm(), logo: '', logoTinta: false }; render(); },
   palMais: () => { const m = lerMarcaDoForm(); m.paleta = [...m.paleta, { nome: 'Nova cor', cor: m.cores.secundaria }]; S.rascunho = m; render(); },
@@ -878,14 +1097,7 @@ document.addEventListener('change', e => {
   if (el.id === 'selT') { trocarTorneio(el.value); render(); return; }
   if (el.dataset.change === 'cat') { S.cat = el.value; el.blur(); render(); }
   if (el.dataset.change === 'pote') { saveT({ atletas: atletas().map(a => a.id === el.dataset.id ? { ...a, pote: +el.value } : a) }); el.blur(); render(); return; }
-  if (el.dataset.change === 'inscCat') {
-    const ind = sorteadas(catById(el.value)), w = $('#in-2-w'), i2 = $('#in-2');
-    if (w) { w.hidden = ind; i2.required = !ind; if (ind) i2.value = ''; }
-    if ($('#in-ind')) $('#in-ind').hidden = !ind;
-    if ($('#in-tit')) $('#in-tit').textContent = ind ? 'Inscrição individual' : 'Inscrever dupla';
-    if ($('#in-1-l')) $('#in-1-l').textContent = ind ? 'Nome do atleta' : 'Atleta 1';
-    return;
-  }
+  if (el.dataset.change === 'inscCat') { ajustarFormInsc(el.value); return; }
   if (el.dataset.change === 'cabeca') saveT({ duplas: duplas().map(d => d.id === el.dataset.id ? { ...d, cabeca: el.checked } : d) });
 });
 const num = (v, d, min) => Math.max(min, Number.isFinite(+v) && v !== '' ? +v : d);
@@ -894,7 +1106,7 @@ const FORM = {
   config: fd => { const o = Object.fromEntries(fd); saveT({ nome: o.nome, data: o.data, local: o.local, quadras: o.quadras.split(',').map(s => s.trim()).filter(Boolean), duracao: num(o.duracao, 20, 5), contato: o.contato, pix: o.pix, pixNome: o.pixNome, inscricoes: fd.has('inscricoes'), opcoes: { comprovante: fd.has('op_comprovante'), desempate: fd.has('op_desempate'), patrocinadores: fd.has('op_patrocinadores') } }).then(() => toast('Torneio salvo.')); },
   cat: (fd, f) => {
     const o = Object.fromEntries(fd); const id = f.dataset.id;
-    const up = { nome: o.nome, formato: o.formato, chaves: num(o.chaves, 1, 1), classificam: num(o.classificam, 1, 1), extras: num(o.extras, 0, 0), pontos: num(o.pontos, 18, 1), teto: num(o.teto, 0, 0), vagas: num(o.vagas, 2, 2), valor: num(o.valor, 0, 0), cobranca: o.cobranca, vantagem: fd.has('vantagem'), terceiro: fd.has('terceiro'), quadras: fd.getAll('q'), modoDuplas: o.modoDuplas === 'sorteadas' ? 'sorteadas' : 'fixas', potes: fd.has('potes'), finalSets: fd.has('finalSets'), pontosSet: num(o.pontosSet, 18, 1), pontosTie: num(o.pontosTie, 15, 1), cor: o.cor === 'outra' ? MK.normHex(o.corOutra, '') : MK.normHex(o.cor, '') };
+    const up = { nome: o.nome, formato: o.formato, chaves: num(o.chaves, 1, 1), classificam: num(o.classificam, 1, 1), extras: num(o.extras, 0, 0), pontos: num(o.pontos, 18, 1), teto: num(o.teto, 0, 0), vagas: num(o.vagas, 2, 2), valor: num(o.valor, 0, 0), cobranca: o.cobranca, vantagem: fd.has('vantagem'), terceiro: fd.has('terceiro'), quadras: fd.getAll('q'), modoDuplas: o.modoDuplas === 'sorteadas' ? 'sorteadas' : 'fixas', potes: fd.has('potes'), finalSets: fd.has('finalSets'), pontosSet: num(o.pontosSet, 18, 1), pontosTie: num(o.pontosTie, 15, 1), cor: o.cor === 'outra' ? MK.normHex(o.corOutra, '') : MK.normHex(o.cor, ''), dia: String(o.dia || ''), hora: String(o.hora || ''), regra: String(o.regra || '').trim().slice(0, 1500) };
     S.editCat = null; saveT({ categorias: cats().map(c => c.id === id ? { ...c, ...up } : c) }).then(() => toast('Categoria salva.'));
   },
   addDupla: (fd, f) => { const o = Object.fromEntries(fd); saveT({ duplas: [...duplas(), { id: uid(), cat: S.cat, j1: o.j1.trim(), j2: o.j2.trim(), cabeca: fd.has('cabeca'), chave: null }] }); f.reset(); },
@@ -930,22 +1142,32 @@ const FORM = {
     S.editJogo = null; finalizar(j, pa, pb).then(() => toast('Resultado salvo. Classificação recalculada.'));
   },
   insc: async (fd, f) => {
-    const o = Object.fromEntries(fd); const c = catById(o.cat); if (!c || !vagasCat(c)) return toast('Esta categoria está esgotada.');
-    if (sorteadas(c)) o.j2 = ''; else if (!String(o.j2 || '').trim()) return toast('Informe o nome dos dois atletas.');
+    const o = Object.fromEntries(fd), cfg = inscCfg(), c = catById(o.cat);
+    if (!c) return toast('Escolha a categoria.');
+    if (!vagasCat(c)) return toast('Esta categoria está esgotada.');
+    const ind = sorteadas(c); if (ind) o.j2 = '';
+    for (const fs of f.querySelectorAll('[data-varias][data-obrig]')) if (!fs.querySelector('input:checked')) return toast('Responda: ' + fs.querySelector('legend').textContent);
+    const extras = {}; (cfg.perguntas || []).forEach(p => { const v = p.tipo === 'varias' ? fd.getAll('q_' + p.id).join(', ') : String(fd.get('q_' + p.id) || '').trim(); if (v) extras[p.id] = v.slice(0, 600); });
+    const btn = f.querySelector('#in-enviar'); if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+    const volta = () => { if (btn) { btn.disabled = false; btn.textContent = 'Enviar inscrição'; } };
     try {
       const u = await ensureAuth(); const id = uid();
       let img = null;
       if (opt('comprovante')) {
-        const file = fd.get('foto'); if (!file || !file.size) return toast('Anexe a foto ou o print do comprovante do Pix.');
-        try { img = await comprimirImagem(file, 1400, 700000); } catch (e) { return toast(e.message === 'formato' ? 'Não consegui abrir esta imagem. Envie um print em JPG ou PNG.' : 'A imagem ficou grande demais. Tente um print da tela do comprovante.'); }
+        const file = fd.get('foto'); if (!file || !file.size) { volta(); return toast('Anexe a foto ou o print do comprovante do Pix.'); }
+        try { img = await comprimirImagem(file, 1400, 700000); } catch (e) { volta(); return toast(e.message === 'formato' ? 'Não consegui abrir esta imagem. Envie um print em JPG ou PNG.' : 'A imagem ficou grande demais. Tente um print da tela do comprovante.'); }
       }
-      const item = { cat: o.cat, j1: o.j1.trim().slice(0, 60), j2: String(o.j2 || '').trim().slice(0, 60), zap: o.zap.trim().slice(0, 30), status: 'pendente', em: Date.now(), uid: u.uid, comprovante: !!img };
+      const cut = (v, n) => String(v || '').trim().slice(0, n);
+      const item = { cat: o.cat, j1: cut(o.j1, 60), j2: cut(o.j2, 60), zap: cut(o.zap, 30), resp: cut(o.resp, 60), status: 'pendente', em: Date.now(), uid: u.uid, comprovante: !!img,
+        email: cut(o.email, 80), ig1: cut(igUser(o.ig1), 40), ig2: ind ? '' : cut(igUser(o.ig2), 40), uni1: cut(o.uni1, 30), uni2: ind ? '' : cut(o.uni2, 30), nomeDupla: ind ? '' : cut(o.nomeDupla, 60),
+        extras, aceites: fd.getAll('aceite').map(x => cut(x, 40)).slice(0, 30) };
       if (img) await setDoc(R(`torneios/${S.tid}/comprovantes/${id}`), { uid: u.uid, img, em: Date.now() });
       await setDoc(R(`torneios/${S.tid}/inscricoes/${id}`), item);
       lsSet('minhas', [...lsGet('minhas', []), { id, tid: S.tid, cat: item.cat, j1: item.j1, j2: item.j2 }]);
-      f.reset(); toast('Inscrição enviada. Aguarde a aprovação do organizador.'); render();
-    } catch (e) { erro(e); }
+      S.inscOk = { ...item, tid: S.tid }; f.reset(); render(); window.scrollTo(0, 0);
+    } catch (e) { volta(); erro(e); }
   },
+  inscCfg: () => { const cfg = lerInscCfg(); saveT({ insc: cfg }).then(() => toast('Página de inscrição salva.')); },
 };
 document.addEventListener('submit', e => { e.preventDefault(); const f = e.target; document.activeElement?.blur?.(); S.pend = false; FORM[f.dataset.form]?.(new FormData(f), f); setTimeout(render, 0); });
 
