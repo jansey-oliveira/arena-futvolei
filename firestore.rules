@@ -90,9 +90,26 @@ service cloud.firestore {
         return request.resource.data.get(campo, '') is string && request.resource.data.get(campo, '').size() <= max;
       }
 
+      // Contador de inscrições por aparelho (limite de 5 por torneio, contra envio em massa).
+      function limite() {
+        return /databases/$(database)/documents/torneios/$(tid)/limites/$(request.auth.uid);
+      }
+      match /limites/{u} {
+        allow read: if isOrg() || (request.auth != null && request.auth.uid == u);
+        allow create: if request.auth != null && request.auth.uid == u
+          && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == 1;
+        allow update: if request.auth != null && request.auth.uid == u
+          && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == resource.data.n + 1
+          && request.resource.data.n <= 5;
+        allow delete: if isOrg();
+      }
+
       match /inscricoes/{iid} {
         allow read, update, delete: if isOrg();
         allow create: if request.auth != null
+          && get(/databases/$(database)/documents/torneios/$(tid)).data.get('inscricoes', false) == true
+          && ((!exists(limite()) && getAfter(limite()).data.n == 1)
+              || (exists(limite()) && getAfter(limite()).data.n == get(limite()).data.n + 1))
           && request.resource.data.keys().hasOnly(['cat', 'j1', 'j2', 'zap', 'status', 'em', 'uid', 'comprovante',
                'resp', 'email', 'ig1', 'ig2', 'uni1', 'uni2', 'nomeDupla', 'extras', 'aceites'])
           && request.resource.data.status == 'pendente'
@@ -113,6 +130,7 @@ service cloud.firestore {
         allow create: if request.auth != null
           && request.resource.data.keys().hasOnly(['uid', 'img', 'em'])
           && request.resource.data.uid == request.auth.uid
+          && getAfter(/databases/$(database)/documents/torneios/$(tid)/inscricoes/$(iid)).data.uid == request.auth.uid
           && request.resource.data.img is string
           && request.resource.data.img.size() < 900000;
       }

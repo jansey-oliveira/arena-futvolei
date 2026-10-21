@@ -119,11 +119,77 @@ export function podio(c, duplas, jogos, manuais = {}) {
   return [fin.vencedor, vice, ...terc];
 }
 
-/** Próximos jogos que podem entrar numa quadra (sem dupla jogando em outra quadra). */
-export function fila(jogos, permite = () => true, quadra = null) {
+/**
+ * Próximos jogos que podem entrar numa quadra: sem dupla jogando em outra quadra,
+ * com a categoria liberada (horário de início já chegou) e a quadra permitida.
+ */
+export function fila(jogos, permite = () => true, quadra = null, liberada = () => true) {
   const ocup = new Set(jogos.filter(j => j.status === 'aovivo').flatMap(j => [j.a, j.b]));
-  return jogos.filter(j => j.status === 'agendado' && j.a && j.b && !ocup.has(j.a) && !ocup.has(j.b) && (!quadra || permite(j.cat, quadra)))
+  return jogos.filter(j => j.status === 'agendado' && j.a && j.b && !ocup.has(j.a) && !ocup.has(j.b) && liberada(j.cat) && (!quadra || permite(j.cat, quadra)))
     .sort((x, y) => x.ordem - y.ordem);
+}
+
+/** Horário de início de uma categoria (timestamp) ou null se não houver horário definido. */
+export function inicioCategoria(c, dataTorneio = '') {
+  if (!c || !c.hora) return null;
+  const dia = c.dia || dataTorneio; if (!dia) return null;
+  const t = new Date(`${dia}T${c.hora}`).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+/**
+ * Previsão de início de cada jogo da fila. Distribui os jogos pela ordem nas quadras livres,
+ * respeitando o horário de início de cada categoria. Retorna { idDoJogo: timestamp }.
+ */
+export function previsoes(jogos, nQuadras, duracaoMs, inicioDe = () => null, agora = Date.now()) {
+  const n = Math.max(1, nQuadras);
+  const livres = Array.from({ length: n }, (_, k) => k < jogos.filter(j => j.status === 'aovivo').length ? agora + duracaoMs * .5 : agora);
+  const out = {};
+  const cedo = j => Math.max(agora, inicioDe(j.cat) || 0);
+  jogos.filter(j => j.status === 'agendado').sort((x, y) => cedo(x) - cedo(y) || x.ordem - y.ordem).forEach(j => {
+    livres.sort((a, b) => a - b);
+    const t = Math.max(livres[0], inicioDe(j.cat) || 0);
+    out[j.id] = t; livres[0] = t + duracaoMs;
+  });
+  return out;
+}
+
+/* ---------- Pix: BR Code (QR estático "copia e cola") ---------- */
+const semAcento = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9 .\-]/g, '').toUpperCase().trim();
+export function cpfValido(d) {
+  d = String(d).replace(/\D/g, ''); if (d.length !== 11 || /^(\d)\1+$/.test(d)) return false;
+  const dv = n => { let s = 0; for (let i = 0; i < n; i++) s += +d[i] * (n + 1 - i); const r = (s * 10) % 11; return r === 10 ? 0 : r; };
+  return dv(9) === +d[9] && dv(10) === +d[10];
+}
+/** Normaliza a chave Pix: e-mail, CPF, CNPJ, telefone (+55...) ou chave aleatória. */
+export function chavePix(k) {
+  k = String(k || '').trim(); if (!k) return '';
+  if (k.includes('@')) return k.toLowerCase();
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)) return k.toLowerCase();
+  const d = k.replace(/\D/g, '');
+  if (k.startsWith('+')) return '+' + d;
+  if (d.length === 14) return d; // CNPJ
+  if (d.length === 11 && cpfValido(d) && !/[()]/.test(k)) return d; // CPF
+  if (d.length === 10 || d.length === 11) return '+55' + d; // telefone com DDD
+  if ((d.length === 12 || d.length === 13) && d.startsWith('55')) return '+' + d;
+  return k;
+}
+export function crc16(s) {
+  let c = 0xFFFF;
+  for (const ch of new TextEncoder().encode(s)) { c ^= ch << 8; for (let i = 0; i < 8; i++) c = c & 0x8000 ? ((c << 1) ^ 0x1021) & 0xFFFF : (c << 1) & 0xFFFF; }
+  return c.toString(16).toUpperCase().padStart(4, '0');
+}
+const tlv = (id, v) => id + String(new TextEncoder().encode(v).length).padStart(2, '0') + v;
+/** Monta o "Pix copia e cola" (BR Code estático) com valor opcional. */
+export function pixPayload({ chave, nome, cidade, valor = 0, txid = '***', info = '' }) {
+  const k = chavePix(chave); if (!k) return '';
+  const conta = tlv('00', 'br.gov.bcb.pix') + tlv('01', k) + (info ? tlv('02', String(info).slice(0, 40)) : '');
+  let p = tlv('00', '01') + tlv('26', conta) + tlv('52', '0000') + tlv('53', '986');
+  if (+valor > 0) p += tlv('54', (+valor).toFixed(2));
+  p += tlv('58', 'BR') + tlv('59', semAcento(nome).slice(0, 25) || 'RECEBEDOR') + tlv('60', semAcento(cidade).slice(0, 15) || 'BRASIL');
+  p += tlv('62', tlv('05', (String(txid).replace(/[^A-Za-z0-9*]/g, '') || '***').slice(0, 25)));
+  p += '6304';
+  return p + crc16(p);
 }
 
 /**

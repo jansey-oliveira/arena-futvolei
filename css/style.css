@@ -363,3 +363,28 @@ td select{width:auto;max-width:140px;padding:5px 8px}
 .ed-item{border:1px solid var(--line);border-radius:var(--r-sm);padding:12px;background:var(--surface2)}
 input[type=email],input[type=time]{background:var(--surface2);border:1px solid var(--line);border-radius:var(--r-sm);padding:9px 11px;width:100%;min-width:0}
 @media (max-width:600px){.ins-info>div+div{border-left:0;padding-left:0;border-top:1px solid var(--line)}}
+
+/* ---------- pacote 1: nome da dupla, horário, W.O., Pix, onde eu jogo ---------- */
+.apel{display:block;font-size:.74em;font-weight:500;color:var(--muted);letter-spacing:.02em;margin-top:1px}
+.game .t.b .apel{text-align:right}
+.tvg .apel{color:var(--tv-dim)}
+.board .apel{color:var(--board-dim)}
+.aguarda{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:0 0 10px}
+.aguarda .chip{display:inline-flex;align-items:center;gap:6px}
+.cat-dot{width:8px;height:8px;border-radius:50%;background:var(--cat,var(--accent));display:inline-block}
+.board .aguarda{justify-content:center;margin-top:12px}
+.wo-btns{display:inline-flex;flex-wrap:wrap;gap:4px 12px;align-items:center}
+tr.desist td{opacity:.55}
+.nowrap{white-space:nowrap}
+.edit-dupla{padding:6px 0}
+.hp{position:absolute!important;left:-9999px!important;width:1px;height:1px;overflow:hidden}
+.pixqr{display:flex;gap:16px;align-items:center;border:1px solid var(--line);border-radius:var(--r-sm);padding:12px;background:var(--surface,transparent)}
+.pixqr .qr{width:150px;height:150px;flex:none;background:#fff;border-radius:var(--r-sm);padding:6px;image-rendering:pixelated}
+@media (max-width:520px){.pixqr{flex-direction:column;align-items:flex-start}}
+.busca input[type=search]{width:100%}
+.duplas-res{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:10px}
+.dupla-card{border:1px solid var(--line);border-left:4px solid var(--cat);border-radius:var(--r-sm);padding:12px;min-width:0}
+.dupla-card details{margin-top:8px}
+.dupla-card summary{cursor:pointer;color:var(--accent-txt)}
+.mj{border-top:1px solid var(--line);padding:8px 0 2px;display:grid;gap:4px}
+.dupla-card>.mj{border-top:0;padding-top:2px}

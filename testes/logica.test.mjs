@@ -114,4 +114,32 @@ assert.match(L.validarSets(cs, L.lerSets('18-15')), /vencedor/);
 assert.match(L.validarSets(cs, L.lerSets('18-17, 18-12')), /1º set/);
 assert.match(L.validarSets(cs, L.lerSets('18-15, 18-12, 15-3')), /decidida/);
 
+// Fila respeita o horário de início das categorias
+const jf = [{ id: 'g1', cat: 'cedo', status: 'agendado', a: 'a', b: 'b', ordem: 2 }, { id: 'g2', cat: 'tarde', status: 'agendado', a: 'c', b: 'd', ordem: 1 }];
+assert.deepEqual(L.fila(jf, () => true, null, cid => cid !== 'tarde').map(j => j.id), ['g1']);
+assert.deepEqual(L.fila(jf).map(j => j.id), ['g2', 'g1']);
+const ini = L.inicioCategoria({ hora: '15:00' }, '2026-12-19');
+assert.equal(new Date(ini).getHours(), 15);
+assert.equal(L.inicioCategoria({ hora: '' }, '2026-12-19'), null);
+assert.equal(L.inicioCategoria({ hora: '10:00', dia: '2026-12-20' }, '2026-12-19'), new Date('2026-12-20T10:00').getTime());
+// Previsões: 2 quadras, 20 min, categoria "tarde" só depois das 15h
+const ag = new Date('2026-12-19T08:00').getTime(), m20 = 20 * 60000, t15 = new Date('2026-12-19T15:00').getTime();
+const jp = [1, 2, 3].map(i => ({ id: 'c' + i, cat: 'cedo', status: 'agendado', ordem: i })).concat([{ id: 't1', cat: 'tarde', status: 'agendado', ordem: 0 }]);
+const pv = L.previsoes(jp, 2, m20, cid => cid === 'tarde' ? t15 : null, ag);
+assert.equal(pv.t1, t15, 'categoria da tarde começa às 15h');
+assert.equal(pv.c1, ag); assert.equal(pv.c2, ag); assert.equal(pv.c3, ag + m20);
+
+// Pix copia e cola (exemplo oficial do manual do BR Code)
+assert.equal(L.pixPayload({ chave: '123e4567-e12b-12d1-a456-426655440000', nome: 'Fulano de Tal', cidade: 'BRASILIA' }),
+  '00020126580014br.gov.bcb.pix0136123e4567-e12b-12d1-a456-4266554400005204000053039865802BR5913FULANO DE TAL6008BRASILIA62070503***63041D3D'.slice(0, -4) + L.crc16('00020126580014br.gov.bcb.pix0136123e4567-e12b-12d1-a456-4266554400005204000053039865802BR5913FULANO DE TAL6008BRASILIA62070503***6304'));
+assert.equal(L.crc16('00020126580014br.gov.bcb.pix0136123e4567-e12b-12d1-a456-4266554400005204000053039865802BR5913Fulano de Tal6008BRASILIA62070503***6304'), '1D3D', 'CRC do exemplo oficial');
+assert.equal(L.chavePix('(11) 92536-5778'), '+5511925365778');
+assert.equal(L.chavePix('529.982.247-25'), '52998224725');
+assert.equal(L.chavePix('Fin@Exemplo.com'), 'fin@exemplo.com');
+assert.equal(L.chavePix('12.345.678/0001-95'), '12345678000195');
+const px = L.pixPayload({ chave: 'pix@arena.com', nome: 'Arena São João', cidade: 'São Paulo', valor: 80 });
+assert.ok(px.includes('540580.00'), 'valor no payload');
+assert.ok(px.includes('5914ARENA SAO JOAO') && px.includes('6009SAO PAULO'));
+assert.equal(px.slice(-4), L.crc16(px.slice(0, -4)));
+
 console.log('Todos os testes passaram.');
