@@ -409,3 +409,18 @@ tr.desist td{opacity:.55}
 .cupom{align-items:flex-end;gap:10px}
 .fin td,.fin th{white-space:nowrap}
 .fin tfoot td{border-top:1px solid var(--line)}
+
+/* ---------- pacote 4: resultados, ranking, fotos, torneios ---------- */
+.modal .box.arte{max-width:min(560px,94vw)}
+.modal .box.arte img{width:100%;height:auto;max-height:72vh;object-fit:contain;border-radius:var(--r-sm)}
+.galeria{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(46%,200px),1fr));gap:10px}
+.galeria figure{margin:0;display:grid;gap:4px}
+.galeria .ft{padding:0;border:0;background:none;cursor:zoom-in;border-radius:var(--r-sm);overflow:hidden;aspect-ratio:1}
+.galeria .ft img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .3s}
+.galeria .ft:hover img{transform:scale(1.04)}
+.agenda{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:12px}
+.ag-card{display:grid;grid-template-columns:76px minmax(0,1fr);gap:14px;border:1px solid var(--line);border-top:3px solid var(--ag);border-radius:var(--r-sm);padding:14px;background:var(--surface)}
+.ag-card h3{margin:0}
+.ag-data{display:flex;flex-direction:column;align-items:center;justify-content:center;border-right:1px solid var(--line);padding-right:12px;text-align:center}
+.ag-data b{font-family:var(--f-display);font-size:2rem;line-height:1}
+.ag-data span{font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}

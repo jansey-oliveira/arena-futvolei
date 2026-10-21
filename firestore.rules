@@ -141,6 +141,18 @@ service cloud.firestore {
           && request.resource.data.img.size() < 900000;
       }
 
+      // Galeria: miniatura (lista) e foto em tamanho maior (aberta ao clicar). Todos veem; só a organização envia.
+      match /fotos/{fid} {
+        allow read: if true;
+        allow create, update: if isOrg() && request.resource.data.thumb is string && request.resource.data.thumb.size() < 120000;
+        allow delete: if isOrg();
+      }
+      match /fotosFull/{fid} {
+        allow read: if true;
+        allow create, update: if isOrg() && request.resource.data.img is string && request.resource.data.img.size() < 900000;
+        allow delete: if isOrg();
+      }
+
       // Patrocinadores (logo, frase e link do QR code), visíveis a todos.
       match /patrocinadores/{pid} {
         allow read: if true;

@@ -296,3 +296,58 @@ export function lerCupons(texto) {
     return { codigo: m[1].toUpperCase(), tipo: m[3] ? '%' : 'R$', valor: +m[2].replace(',', '.') };
   }).filter(Boolean);
 }
+
+/* ---------- Colocação final e ranking de circuito ---------- */
+export const PONTOS_PADRAO = { '1': 100, '2': 70, '3': 50, '4': 40, quartas: 30, oitavas: 20, participacao: 10 };
+const ROT = { '1': '1º lugar', '2': '2º lugar', '3': '3º lugar', '4': '4º lugar', quartas: 'Quartas de final', oitavas: 'Oitavas de final', participacao: 'Participação' };
+export const rotuloColocacao = k => ROT[k] || (/^\d+$/.test(k) ? `${k}º lugar` : k);
+/** Lê "1º=100, 2º=70, 3º=50, 4º=40, quartas=30, oitavas=20, participação=10". */
+export function lerPontos(texto) {
+  const out = { ...PONTOS_PADRAO };
+  String(texto || '').split(/[,;\n]/).forEach(p => {
+    const m = p.match(/^\s*([^=:]+?)\s*[=:]\s*(\d+)\s*$/); if (!m) return;
+    const k = m[1].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[º°o]$/, '').replace(/\s+/g, '').replace('lugar', '');
+    const chave = /^\d+$/.test(k) ? k : k.startsWith('quart') ? 'quartas' : k.startsWith('oit') ? 'oitavas' : k.startsWith('part') ? 'participacao' : null;
+    if (chave) out[chave] = +m[2];
+  });
+  return out;
+}
+export const pontosTxt = p => `1º=${p['1']}, 2º=${p['2']}, 3º=${p['3']}, 4º=${p['4']}, quartas=${p.quartas}, oitavas=${p.oitavas}, participação=${p.participacao}`;
+/**
+ * Colocação final de cada dupla de uma categoria encerrada: [{id, k}] em ordem.
+ * k: '1'..'n' (posição), 'quartas', 'oitavas' ou 'participacao'.
+ */
+export function colocacoes(c, duplas, jogos, manuais = {}) {
+  const pd = podio(c, duplas, jogos, manuais); if (!pd) return null;
+  const ids = duplas.filter(d => d.cat === c.id).map(d => d.id);
+  if (c.formato === 'todos') return tabela(duplas, jogos, c.id, 'A', manuais[c.id + '|A'] || null).map((r, i) => ({ id: r.id, k: String(i + 1) }));
+  const out = [], usado = new Set(), add = (id, k) => { if (id && !usado.has(id)) { usado.add(id); out.push({ id, k }); } };
+  add(pd[0], '1'); add(pd[1], '2');
+  const t3 = jogos.find(j => j.cat === c.id && j.rodadaNome === '3º lugar' && j.status === 'fim');
+  if (t3) { add(t3.vencedor, '3'); add(t3.a === t3.vencedor ? t3.b : t3.a, '4'); } else pd.slice(2).forEach(id => add(id, '3'));
+  const perdeu = nome => jogos.filter(j => j.cat === c.id && j.fase === 'mata' && j.rodadaNome === nome && j.status === 'fim').map(j => j.a === j.vencedor ? j.b : j.a);
+  perdeu('Quartas').forEach(id => add(id, 'quartas'));
+  perdeu('Oitavas').forEach(id => add(id, 'oitavas'));
+  ids.forEach(id => add(id, 'participacao'));
+  return out;
+}
+const nomeNorm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+/**
+ * Ranking individual de um circuito. etapas: [{id, nome, data, resultados: {categoria: [{a:[nomes], k, pts}]}}].
+ * Retorna {categoria: [{nome, pontos, etapas, melhor, porEtapa:{id:pts}}]} ordenado por pontos.
+ */
+export function rankingCircuito(etapas) {
+  const cats = {};
+  etapas.forEach(e => Object.entries(e.resultados || {}).forEach(([cat, lista]) => {
+    const ck = nomeNorm(cat); const g = cats[ck] = cats[ck] || { nome: cat, atletas: {} };
+    lista.forEach(r => (r.a || []).filter(Boolean).forEach(nome => {
+      const nk = nomeNorm(nome); const at = g.atletas[nk] = g.atletas[nk] || { nome, pontos: 0, etapas: 0, melhor: null, porEtapa: {} };
+      at.pontos += +r.pts || 0; at.etapas++; at.porEtapa[e.id] = (at.porEtapa[e.id] || 0) + (+r.pts || 0);
+      const ordem = k => /^\d+$/.test(k) ? +k : k === 'quartas' ? 5 : k === 'oitavas' ? 9 : 99;
+      if (!at.melhor || ordem(r.k) < ordem(at.melhor)) at.melhor = r.k;
+    }));
+  }));
+  const out = {};
+  Object.values(cats).forEach(g => { out[g.nome] = Object.values(g.atletas).sort((a, b) => b.pontos - a.pontos || b.etapas - a.etapas || a.nome.localeCompare(b.nome)); });
+  return out;
+}

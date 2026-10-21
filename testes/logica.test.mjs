@@ -164,4 +164,26 @@ assert.deepEqual(L.lerCupons('amigo10 = 10%\nVIP = 20\nruim'), [{ codigo: 'AMIGO
 assert.equal(L.comCupom(90, { tipo: '%', valor: 10 }), 81);
 assert.equal(L.comCupom(90, { tipo: 'R$', valor: 100 }), 0);
 
+// Colocações e ranking
+assert.deepEqual(L.lerPontos('1º=120, 2º = 80, quartas=35, participação=5'), { ...L.PONTOS_PADRAO, '1': 120, '2': 80, quartas: 35, participacao: 5 });
+{
+  const cm = { id: 'm', formato: 'mata', terceiro: true };
+  const dm = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(id => ({ id, cat: 'm' }));
+  const gm = L.montarMata(cm, dm.map(d => d.id), 0, (() => { let n = 0; return () => 'm' + n++; })());
+  const by = id => gm.find(g => g.id === id);
+  const jogar = (g, v) => { g.status = 'fim'; g.vencedor = g[v]; const perd = v === 'a' ? g.b : g.a; if (g.prox) by(g.prox.id)[g.prox.slot] = g.vencedor; if (g.perdProx) by(g.perdProx.id)[g.perdProx.slot] = perd; };
+  ['Quartas', 'Semifinal'].forEach(r => gm.filter(g => g.rodadaNome === r).forEach(g => jogar(g, 'a')));
+  jogar(gm.find(g => g.rodadaNome === '3º lugar'), 'b'); jogar(gm.find(g => g.rodadaNome === 'Final'), 'a');
+  const col = L.colocacoes(cm, dm, gm);
+  assert.deepEqual(col.map(x => x.k), ['1', '2', '3', '4', 'quartas', 'quartas', 'quartas', 'quartas']);
+  assert.equal(new Set(col.map(x => x.id)).size, 8);
+}
+const rk = L.rankingCircuito([
+  { id: 'e1', resultados: { Misto: [{ a: ['Ana', 'Paulo'], k: '1', pts: 100 }, { a: ['Bia', 'Rui'], k: '2', pts: 70 }] } },
+  { id: 'e2', resultados: { misto: [{ a: ['Ána', 'Rui'], k: '2', pts: 70 }, { a: ['Paulo', 'Bia'], k: '1', pts: 100 }] } },
+]);
+const mx = rk.Misto; assert.equal(mx[0].pontos, 200); assert.ok(['Paulo', 'Ana'].includes(mx[0].nome));
+assert.equal(mx.find(x => x.nome === 'Ana').etapas, 2, 'nome com acento conta como o mesmo atleta');
+assert.equal(mx.find(x => x.nome === 'Rui').pontos, 140);
+
 console.log('Todos os testes passaram.');
