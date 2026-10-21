@@ -404,3 +404,8 @@ tr.desist td{opacity:.55}
 .chamada .apel{color:inherit;opacity:.75;font-family:var(--f-body,inherit);font-size:.3em}
 @keyframes chamar{from{transform:translateY(30px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){.chamada{animation:none}}
+
+/* ---------- pacote 3: inscrições e financeiro ---------- */
+.cupom{align-items:flex-end;gap:10px}
+.fin td,.fin th{white-space:nowrap}
+.fin tfoot td{border-top:1px solid var(--line)}

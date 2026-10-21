@@ -105,14 +105,20 @@ service cloud.firestore {
       }
 
       match /inscricoes/{iid} {
-        allow read, update, delete: if isOrg();
+        allow list, update, delete: if isOrg();
+        // O atleta consegue ver a situação da própria inscrição (feita neste aparelho).
+        allow get: if isOrg() || (request.auth != null && resource.data.uid == request.auth.uid);
         allow create: if request.auth != null
           && get(/databases/$(database)/documents/torneios/$(tid)).data.get('inscricoes', false) == true
+          && (get(/databases/$(database)/documents/torneios/$(tid)).data.get('inscAte', 0) == 0
+              || request.time.toMillis() < get(/databases/$(database)/documents/torneios/$(tid)).data.get('inscAte', 0))
           && ((!exists(limite()) && getAfter(limite()).data.n == 1)
               || (exists(limite()) && getAfter(limite()).data.n == get(limite()).data.n + 1))
           && request.resource.data.keys().hasOnly(['cat', 'j1', 'j2', 'zap', 'status', 'em', 'uid', 'comprovante',
-               'resp', 'email', 'ig1', 'ig2', 'uni1', 'uni2', 'nomeDupla', 'extras', 'aceites'])
-          && request.resource.data.status == 'pendente'
+               'resp', 'email', 'ig1', 'ig2', 'uni1', 'uni2', 'nomeDupla', 'extras', 'aceites', 'valor', 'cupom'])
+          && request.resource.data.status in ['pendente', 'espera']
+          && request.resource.data.get('valor', 0) is number && request.resource.data.get('valor', 0) >= 0
+          && texto('cupom', 30)
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.cat is string && request.resource.data.cat.size() <= 40
           && request.resource.data.j1 is string && request.resource.data.j1.size() <= 60

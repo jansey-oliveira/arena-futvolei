@@ -267,3 +267,32 @@ export function validarSets(c, sets) {
   }
   return (a === 2 || b === 2) ? null : 'A partida ainda não tem vencedor (precisa de 2 sets).';
 }
+
+/* ---------- Preço: lotes por data e cupom de desconto ---------- */
+/** Lê lotes no formato "até 30/11/2026 = 70" (um por linha). Retorna [{ate:'2026-11-30', valor:70}] em ordem de data. */
+export function lerLotes(texto) {
+  return String(texto || '').split('\n').map(l => {
+    const m = l.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*[=:\-–]\s*(?:R\$\s*)?([\d.,]+)/i); if (!m) return null;
+    const v = +m[4].replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.'); if (!Number.isFinite(v)) return null;
+    return { ate: `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`, valor: v };
+  }).filter(Boolean).sort((a, b) => a.ate.localeCompare(b.ate));
+}
+export const lotesTxt = lotes => (lotes || []).map(l => `até ${l.ate.split('-').reverse().join('/')} = ${String(l.valor).replace('.', ',')}`).join('\n');
+/** Preço vigente da categoria na data (YYYY-MM-DD): o primeiro lote ainda válido ou o valor normal. */
+export function precoAtual(c, hoje) {
+  const l = (c?.lotes || []).find(x => x.ate >= hoje);
+  return l ? { valor: +l.valor, lote: l } : { valor: +(c?.valor || 0), lote: null };
+}
+/** Aplica um cupom {tipo:'%'|'R$', valor} a um total. */
+export function comCupom(total, cupom) {
+  if (!cupom) return total;
+  const d = cupom.tipo === '%' ? total * Math.min(100, +cupom.valor) / 100 : +cupom.valor;
+  return Math.max(0, Math.round((total - d) * 100) / 100);
+}
+/** Lê cupons no formato "CODIGO = 10%" ou "CODIGO = 20" (um por linha). */
+export function lerCupons(texto) {
+  return String(texto || '').split('\n').map(l => {
+    const m = l.match(/^\s*([A-Za-z0-9_-]{2,30})\s*[=:]\s*(?:R\$\s*)?([\d.,]+)\s*(%?)\s*$/); if (!m) return null;
+    return { codigo: m[1].toUpperCase(), tipo: m[3] ? '%' : 'R$', valor: +m[2].replace(',', '.') };
+  }).filter(Boolean);
+}

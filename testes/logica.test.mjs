@@ -153,4 +153,15 @@ assert.deepEqual(L.fila(jd, () => true, null, () => true, j => !j.segurar).map(j
 assert.deepEqual(L.desfazerPonto({ pa: 3, pb: 2, log: [{ k: 'pa', d: 1 }, { k: 'pb', d: 1 }] }), { pb: 1, log: [{ k: 'pa', d: 1 }] });
 assert.equal(L.desfazerPonto({ pa: 0, pb: 0, log: [] }), null);
 
+// Lotes e cupons
+const lt = L.lerLotes('até 30/11/2026 = 70\naté 10/12/2026 = R$ 80,50\nqualquer coisa');
+assert.deepEqual(lt, [{ ate: '2026-11-30', valor: 70 }, { ate: '2026-12-10', valor: 80.5 }]);
+assert.equal(L.precoAtual({ valor: 90, lotes: lt }, '2026-11-15').valor, 70);
+assert.equal(L.precoAtual({ valor: 90, lotes: lt }, '2026-12-01').valor, 80.5);
+assert.equal(L.precoAtual({ valor: 90, lotes: lt }, '2026-12-11').valor, 90);
+assert.equal(L.lerLotes(L.lotesTxt(lt)).length, 2);
+assert.deepEqual(L.lerCupons('amigo10 = 10%\nVIP = 20\nruim'), [{ codigo: 'AMIGO10', tipo: '%', valor: 10 }, { codigo: 'VIP', tipo: 'R$', valor: 20 }]);
+assert.equal(L.comCupom(90, { tipo: '%', valor: 10 }), 81);
+assert.equal(L.comCupom(90, { tipo: 'R$', valor: 100 }), 0);
+
 console.log('Todos os testes passaram.');

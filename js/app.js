@@ -765,6 +765,7 @@ function catForm(c, t) {
    <label class="check"><input id="cf-potes" name="potes" type="checkbox"${c.potes ? ' checked' : ''}> Sortear com 2 potes (cada dupla tem um atleta de cada pote)</label>
    <label class="field"><span>Dia da categoria</span><input id="cf-dia" name="dia" type="date" value="${esc(c.dia || '')}"></label>
    <label class="field"><span>Horário de início</span><input id="cf-hora" name="hora" type="time" value="${esc(c.hora || '')}"></label>
+   <label class="field full"><span>Lotes de preço (opcional, um por linha: até 30/11/2026 = 70). Depois do último lote vale o valor da inscrição.</span><textarea id="cf-lotes" name="lotes" maxlength="400" placeholder="até 30/11/2026 = 70&#10;até 10/12/2026 = 80">${esc(L.lotesTxt(c.lotes))}</textarea></label>
    <label class="field full"><span>Regra específica da categoria (o atleta precisa aceitar na inscrição)</span><textarea id="cf-regra" name="regra" maxlength="1500" placeholder="Ex.: no Misto Estreante, o atleta masculino pode ser de nível até Amador C.">${esc(c.regra || '')}</textarea></label>
    <label class="check full"><input id="cf-fs" name="finalSets" type="checkbox"${c.finalSets ? ' checked' : ''}> Final em melhor de 3 sets</label>
    ${f('pontosSet', 'Sets da final até (pontos)', c.pontosSet || c.pontos || 18, 'number', 'min="1"')}${f('pontosTie', '3º set até (pontos)', c.pontosTie || 15, 'number', 'min="1"')}
@@ -937,7 +938,20 @@ function cronograma() {
   const dias = []; itens.forEach(c => { let g = dias.find(x => x.dia === (c.dia || '')); if (!g) dias.push(g = { dia: c.dia || '', itens: [] }); g.itens.push(c); });
   return dias;
 }
-const precoTxt = c => `${brl(c.valor)} ${c.cobranca === 'atleta' ? 'por atleta' : 'por dupla'}`;
+const hojeISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const preco = c => L.precoAtual(c, hojeISO());
+const precoTxt = c => { const p = preco(c); return `${brl(p.valor)} ${c.cobranca === 'atleta' ? 'por atleta' : 'por dupla'}${p.lote ? ` · até ${dataBR(p.lote.ate)}` : ''}`; };
+/** Total a pagar na inscrição: preço vigente × atletas (se cobrado por atleta), com cupom aplicado. */
+const totalInsc = (c, ind, cupom = null) => c ? L.comCupom(preco(c).valor * (c.cobranca === 'atleta' && !ind ? 2 : 1), cupom) : 0;
+/** Valor de uma inscrição já feita (o salvo nela ou o calculado). */
+const valorInsc = i => Number.isFinite(+i.valor) && i.valor !== undefined && i.valor !== null ? +i.valor : (() => { const c = catById(i.cat); return c ? +c.valor * (c.cobranca === 'atleta' && i.j2 ? 2 : 1) : 0; })();
+async function hashCupom(cod, tid = S.tid) {
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(tid + ':' + String(cod).trim().toUpperCase()));
+  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+/** Prazo das inscrições (timestamp) e se ainda estão abertas. */
+const prazoInsc = () => +T()?.inscAte || 0;
+const inscAbertas = () => !!T()?.inscricoes && (!prazoInsc() || Date.now() < prazoInsc());
 
 function paginaInscricao() {
   const t = T(), cfg = inscCfg(), d = partesData(t.data), crono = cronograma();
@@ -946,8 +960,9 @@ function paginaInscricao() {
   const quando = cfg.datas || (d ? `${d.semana}, ${d.dm.replace('.', '/')} de ${d.mes} de ${d.ano}` : '');
   const cardsCat = cats().map(c => {
     const v = vagasCat(c), quandoCat = [diaTxt(c.dia), horaTxt(c.hora)].filter(Boolean).join(' · ');
-    return `<div class="ins-cat" style="${estCat(c)}"><div class="row between" style="gap:8px"><h4>${esc(c.nome)}</h4>${v ? `<span class="chip">${v} ${sorteadas(c) ? (v === 1 ? 'vaga de atleta' : 'vagas de atleta') : (v === 1 ? 'vaga' : 'vagas')}</span>` : '<span class="chip">esgotada</span>'}</div>
+    return `<div class="ins-cat" style="${estCat(c)}"><div class="row between" style="gap:8px"><h4>${esc(c.nome)}</h4>${v ? `<span class="chip">${v} ${sorteadas(c) ? (v === 1 ? 'vaga de atleta' : 'vagas de atleta') : (v === 1 ? 'vaga' : 'vagas')}</span>` : '<span class="chip">esgotada · lista de espera</span>'}</div>
       <b class="preco">${precoTxt(c)}</b>
+      ${preco(c).lote ? `<span class="small muted">Depois sobe para ${brl((c.lotes || []).find(l => l.ate > preco(c).lote.ate)?.valor ?? c.valor)}</span>` : ''}
       ${quandoCat ? `<span class="small muted">${esc(quandoCat)}</span>` : ''}
       ${sorteadas(c) ? '<span class="small muted">Inscrição individual: as duplas são sorteadas.</span>' : ''}
       ${c.regra ? `<details class="small"><summary>Regra da categoria</summary><p style="margin:6px 0 0">${esc(c.regra)}</p></details>` : ''}</div>`;
@@ -975,7 +990,7 @@ function paginaInscricao() {
 
   ${cfg.incluso ? `<section class="ins-sec"><h3>O que está incluso</h3><ul class="incluso">${linhas(cfg.incluso).map(l => `<li>${esc(l)}</li>`).join('')}</ul></section>` : ''}
 
-  ${!t.inscricoes ? '<div class="panel muted">As inscrições deste torneio estão fechadas.</div>' : formInscricao(cfg, pix)}
+  ${!inscAbertas() ? `<div class="panel muted">As inscrições deste torneio estão fechadas${prazoInsc() && t.inscricoes ? ` desde ${new Date(prazoInsc()).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}.</div>` : (prazoInsc() ? `<p class="dica" style="margin:0">Inscrições até ${new Date(prazoInsc()).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}.</p>` : '') + formInscricao(cfg, pix)}
   </div>`;
 }
 
@@ -997,7 +1012,7 @@ function formInscricao(cfg, pix) {
   let n = 0; const passo = (titulo, corpo, attrs = '') => `<section class="ins-passo"${attrs}><h3><span class="num">${String(++n).padStart(2, '0')}</span>${titulo}</h3>${corpo}</section>`;
   return `<form class="panel ins-form" data-form="insc">
     <div class="sect-head"><div><div class="eyebrow">Formulário</div><h2>Faça sua inscrição</h2></div><span class="small muted">* todos os campos são obrigatórios, exceto os marcados como opcionais</span></div>
-    ${passo('Categoria', `<div class="ins-opcoes">${cats().map(c => { const v = vagasCat(c); return `<label class="ins-opt" style="${estCat(c)}"><input type="radio" name="cat" value="${c.id}" data-change="inscCat"${v ? '' : ' disabled'} required><span><b>${esc(c.nome)}</b><small>${precoTxt(c)}${v ? '' : ' · esgotada'}</small></span></label>`; }).join('')}</div>
+    ${passo('Categoria', `<div class="ins-opcoes">${cats().map(c => { const v = vagasCat(c); return `<label class="ins-opt" style="${estCat(c)}"><input type="radio" name="cat" value="${c.id}" data-change="inscCat" required><span><b>${esc(c.nome)}</b><small>${precoTxt(c)}${v ? '' : ' · esgotada: entre na lista de espera'}</small></span></label>`; }).join('')}</div>
       <p class="small muted" id="in-ind" hidden style="margin:0">Nesta categoria as duplas são sorteadas entre os atletas. Inscreva só você.</p>`)}
     ${passo('Atletas', `${atleta(1)}${atleta(2)}
       ${cfg.nomeDupla ? `<label class="field" id="in-nd-w"><span>Nome da dupla (opcional)</span><input id="in-nd" name="nomeDupla" type="text" maxlength="60" placeholder="Como vocês querem aparecer no telão"></label>` : ''}`)}
@@ -1011,8 +1026,10 @@ function formInscricao(cfg, pix) {
       ${cats().filter(c => c.regra).map(c => `<div class="termo" data-regra="${c.id}" hidden style="${estCat(c)}"><b class="cat-tag">Regra · ${esc(c.nome)}</b><p>${esc(c.regra)}</p><label class="check"><input id="in-rg-${c.id}" type="checkbox" name="aceite" value="regra" required disabled> Li e concordo com a regra da categoria</label></div>`).join('')}
       ${(cfg.termos || []).map(tm => `<div class="termo"><b>${esc(tm.titulo)}</b><p>${esc(tm.texto)}</p><label class="check"><input id="in-t-${tm.id}" type="checkbox" name="aceite" value="${esc(tm.id)}" required> Li e aceito</label></div>`).join('') || '<p class="small muted" style="margin:0">Sem termos para aceitar.</p>'}
     </div>`)}
-    ${passo('Pagamento', `<div class="stack" style="gap:12px"><div id="in-valor" class="ins-valor small muted">Escolha a categoria para ver o valor.</div><div id="in-pixqr"></div>${pix}
-      ${opt('comprovante') ? '<label class="field"><span>Comprovante do Pix (foto ou print)</span><input id="in-f" name="foto" type="file" accept="image/*" required></label>' : `<p class="small muted" style="margin:0">Envie o comprovante ao organizador${T().contato ? ' pelo WhatsApp ' + esc(T().contato) : ''}.</p>`}
+    ${passo('Pagamento', `<div class="stack" style="gap:12px"><div id="in-espera" class="dica" hidden style="margin:0">Esta categoria está esgotada. Você entra na <b>lista de espera</b> e não precisa pagar agora: se abrir uma vaga, o organizador chama pelo WhatsApp.</div>
+      ${(cfg.cupons || []).length ? `<div class="cupom row"><label class="field" style="flex:1"><span>Cupom de desconto (opcional)</span><input id="in-cupom" name="cupom" type="text" maxlength="30" autocapitalize="characters" autocomplete="off"></label><button type="button" class="btn ghost sm" data-act="aplicarCupom">Aplicar</button></div>` : ''}
+      <div id="in-pag"><div id="in-valor" class="ins-valor small muted">Escolha a categoria para ver o valor.</div><div id="in-pixqr"></div>${pix}
+      ${opt('comprovante') ? '<label class="field"><span>Comprovante do Pix (foto ou print)</span><input id="in-f" name="foto" type="file" accept="image/*" required></label>' : `<p class="small muted" style="margin:0">Envie o comprovante ao organizador${T().contato ? ' pelo WhatsApp ' + esc(T().contato) : ''}.</p>`}</div>
       ${cfg.aviso ? `<p class="dica" style="margin:0">${esc(cfg.aviso)}</p>` : ''}</div>`)}
     <label class="hp" aria-hidden="true">Site<input name="site" type="text" tabindex="-1" autocomplete="off"></label>
     <div class="row between"><button class="btn" id="in-enviar">Enviar inscrição</button><span class="small muted" id="in-erro" role="alert"></span></div>
@@ -1028,8 +1045,11 @@ function ajustarFormInsc(cid) {
   const a1 = $('#in-a1 legend'); if (a1) a1.textContent = ind ? 'Atleta' : 'Atleta 1';
   if ($('#in-ind')) $('#in-ind').hidden = !ind;
   document.querySelectorAll('[data-regra]').forEach(b => { const on = b.dataset.regra === cid; b.hidden = !on; b.querySelector('input').disabled = !on; });
-  const v = $('#in-valor');
-  if (v && c) { const total = c.cobranca === 'atleta' && !ind ? c.valor * 2 : c.valor; v.innerHTML = `<b style="color:var(--ink);font-size:1.1rem">${brl(total)}</b> · ${esc(c.nome)}${c.cobranca === 'atleta' && !ind ? ` (${brl(c.valor)} por atleta)` : ''}`;
+  const v = $('#in-valor'), espera = c && !vagasCat(c);
+  if ($('#in-espera')) $('#in-espera').hidden = !espera;
+  if ($('#in-pag')) { $('#in-pag').hidden = !!espera; const f = $('#in-f'); if (f) f.disabled = !!espera; }
+  if ($('#in-enviar')) $('#in-enviar').textContent = espera ? 'Entrar na lista de espera' : 'Enviar inscrição';
+  if (v && c) { const pv = preco(c).valor, total = totalInsc(c, ind, S.cupomOk); v.innerHTML = `<b style="color:var(--ink);font-size:1.1rem">${brl(total)}</b> · ${esc(c.nome)}${c.cobranca === 'atleta' && !ind ? ` (${brl(pv)} por atleta)` : ''}${S.cupomOk ? ` · cupom ${esc(S.cupomOk.codigo)} aplicado` : ''}`;
     const pq = $('#in-pixqr'); if (pq) pq.innerHTML = +total > 0 ? pixQR(total) : ''; }
 }
 
@@ -1037,10 +1057,11 @@ function inscConfirmada(r) {
   const c = catById(r.cat);
   return `<div class="stack ins"><section class="panel ins-ok stack" style="${estCat(c)}">
     ${logoHTML(marca(), '96px', 'var(--cat)')}
-    <div class="eyebrow">Inscrição recebida</div><h2>Tudo certo, ${esc(r.resp.split(' ')[0] || r.j1)}!</h2>
+    <div class="eyebrow">${r.status === 'espera' ? 'Lista de espera' : 'Inscrição recebida'}</div><h2>${r.status === 'espera' ? 'Você está na fila' : 'Tudo certo'}, ${esc(r.resp.split(' ')[0] || r.j1)}!</h2>
     <p style="margin:0">A inscrição de <b>${esc(r.j2 ? `${r.j1} / ${r.j2}` : r.j1)}</b> na categoria <b class="cat-tag">${esc(c?.nome || '')}</b> foi enviada.
-    ${r.comprovante ? 'O organizador vai conferir o comprovante e aprovar.' : 'Envie o comprovante ao organizador para confirmar.'}</p>
-    ${!r.comprovante && c ? pixQR(c.cobranca === 'atleta' && r.j2 ? c.valor * 2 : c.valor) : ''}
+    ${r.status === 'espera' ? 'A categoria está esgotada. Se abrir uma vaga, o organizador chama pelo WhatsApp informado.' : r.comprovante ? 'O organizador vai conferir o comprovante e aprovar.' : 'Envie o comprovante ao organizador para confirmar.'}</p>
+    <p class="small muted" style="margin:0">Acompanhe a situação em <b>Inscrição</b>, neste mesmo aparelho.</p>
+    ${!r.comprovante && r.status !== 'espera' && c ? pixQR(valorInsc(r)) : ''}
     ${inscCfg().aviso ? `<p class="dica" style="margin:0">${esc(inscCfg().aviso)}</p>` : ''}
     <div class="row"><button class="btn ghost" data-act="novaInsc">Fazer outra inscrição</button><button class="btn ghost" data-act="tab" data-k="painel">Ver o torneio</button></div>
   </section></div>`;
@@ -1048,7 +1069,38 @@ function inscConfirmada(r) {
 
 /* ---------- inscrições: visão do organizador ---------- */
 const LIMITE_INSC = 5;
-const STATUS_TXT = { pendente: 'pendente', aprovada: 'aprovada', recusada: 'recusada' };
+async function validarCupom(cod) {
+  const h = await hashCupom(cod); const cp = (inscCfg().cupons || []).find(x => x.h === h);
+  return cp ? { codigo: String(cod).trim().toUpperCase(), tipo: cp.tipo, valor: cp.valor } : null;
+}
+const STATUS_TXT = { pendente: 'pendente', aprovada: 'aprovada', recusada: 'recusada', espera: 'lista de espera' };
+/** Link de WhatsApp com mensagem pronta para a dupla, conforme a situação da inscrição. */
+function waInsc(i) {
+  let n = String(i.zap || '').replace(/\D/g, ''); if (!n) return ''; if (n.length <= 11) n = '55' + n;
+  const t = T(), c = catById(i.cat), quem = esc(nomeInsc(i)), oi = `Olá, ${String(i.resp || i.j1).split(' ')[0]}!`;
+  const msg = {
+    aprovada: `${oi} A inscrição de ${nomeInsc(i)} na categoria ${c?.nome || ''} do ${t.nome} está confirmada. Nos vemos na areia!`,
+    recusada: `${oi} A inscrição de ${nomeInsc(i)} na categoria ${c?.nome || ''} do ${t.nome} não foi aprovada. Fale com a gente para entender o motivo.`,
+    espera: `${oi} ${nomeInsc(i)} está na lista de espera da categoria ${c?.nome || ''} do ${t.nome}. Avisamos se abrir uma vaga.`,
+    pendente: i.daEspera ? `${oi} Abriu uma vaga na categoria ${c?.nome || ''} do ${t.nome}! Para garantir, pague ${brl(valorInsc(i))} pelo Pix ${t.pix || ''}${t.pixNome ? ' (' + t.pixNome + ')' : ''} e envie o comprovante por aqui.`
+      : `${oi} Recebemos a inscrição de ${nomeInsc(i)} na categoria ${c?.nome || ''} do ${t.nome}. Estamos conferindo o pagamento.`,
+  }[i.status];
+  return msg ? `https://wa.me/${n}?text=${encodeURIComponent(msg)}` : '';
+}
+function financeiroHTML() {
+  const linhas = cats().map(c => {
+    const is = S.insc.filter(i => i.cat === c.id), soma = st => is.filter(i => i.status === st).reduce((s, i) => s + valorInsc(i), 0);
+    const nAp = is.filter(i => i.status === 'aprovada').length;
+    const esperado = (+c.vagas || 0) * preco(c).valor * (c.cobranca === 'atleta' && !sorteadas(c) ? 2 : 1);
+    const desc = is.filter(i => i.cupom && i.status !== 'recusada').length;
+    return { c, ap: soma('aprovada'), pend: soma('pendente'), nAp, nPend: is.filter(i => i.status === 'pendente').length, nEsp: is.filter(i => i.status === 'espera').length, esperado, desc };
+  });
+  const tot = k => linhas.reduce((s, l) => s + l[k], 0);
+  return `<section class="panel"><div class="tw"><table class="fin"><thead><tr><th>Categoria</th><th class="n">Aprovadas</th><th class="n">Recebido</th><th class="n">Pendentes</th><th class="n">A conferir</th><th class="n">Espera</th><th class="n">Com cupom</th><th class="n">Potencial (vagas cheias)</th></tr></thead><tbody>
+    ${linhas.map(l => `<tr style="${estCat(l.c)}"><td><span class="cat-tag">${esc(l.c.nome)}</span></td><td class="n">${l.nAp}</td><td class="n">${brl(l.ap)}</td><td class="n">${l.nPend}</td><td class="n">${brl(l.pend)}</td><td class="n">${l.nEsp}</td><td class="n">${l.desc}</td><td class="n">${brl(l.esperado)}</td></tr>`).join('')}
+    </tbody><tfoot><tr><td><b>Total</b></td><td class="n"><b>${tot('nAp')}</b></td><td class="n"><b>${brl(tot('ap'))}</b></td><td class="n"><b>${tot('nPend')}</b></td><td class="n"><b>${brl(tot('pend'))}</b></td><td class="n"><b>${tot('nEsp')}</b></td><td class="n"><b>${tot('desc')}</b></td><td class="n"><b>${brl(tot('esperado'))}</b></td></tr></tfoot></table></div>
+    <p class="small muted" style="margin:10px 0 0">Recebido = inscrições aprovadas. A conferir = pendentes com valor a confirmar no extrato. Valores com lote e cupom aplicados no momento da inscrição.</p></section>`;
+}
 function insDetalhe(i, cfg) {
   const c = catById(i.cat), ex = i.extras || {};
   const at = (n) => { const nm = i['j' + n]; if (!nm) return ''; const ig = i['ig' + n], un = i['uni' + n]; return `<div><b>${esc(nm)}</b>${ig ? ` · <a class="link" href="${igLink(ig)}" target="_blank" rel="noopener">@${esc(igUser(ig))}</a>` : ''}${un ? ` · <span class="chip">${esc(un)}</span>` : ''}</div>`; };
@@ -1060,7 +1112,9 @@ function insDetalhe(i, cfg) {
     ${perg ? `<div class="small stack" style="gap:2px">${perg}</div>` : ''}
     ${i.aceites?.length ? `<div class="small muted">Aceitou ${i.aceites.length} ${i.aceites.length === 1 ? 'termo' : 'termos'}.</div>` : ''}
     <div class="row">${i.comprovante ? `<button class="btn ghost sm" data-act="verComp" data-id="${i.id}">Ver comprovante</button>` : '<span class="small muted">sem comprovante</span>'}
-      ${i.status === 'pendente' ? `<button class="btn sm" data-act="insc" data-id="${i.id}" data-s="aprovada">Aprovar</button><button class="btn ghost sm" data-act="insc" data-id="${i.id}" data-s="recusada">Recusar</button>` : `<span class="chip ${i.status === 'aprovada' ? 'ok' : ''}">${STATUS_TXT[i.status] || i.status}</span>`}</div>
+      ${i.status === 'pendente' ? `<button class="btn sm" data-act="insc" data-id="${i.id}" data-s="aprovada">Aprovar</button><button class="btn ghost sm" data-act="insc" data-id="${i.id}" data-s="recusada">Recusar</button>` : i.status === 'espera' ? `<button class="btn sm" data-act="chamarEspera" data-id="${i.id}"${vagasCat(c || {}) ? '' : ' disabled title="Sem vaga aberta nesta categoria"'}>Chamar da lista</button>` : `<span class="chip ${i.status === 'aprovada' ? 'ok' : ''}">${STATUS_TXT[i.status] || i.status}</span>`}
+      ${waInsc(i) ? `<a class="btn ghost sm" href="${waInsc(i)}" target="_blank" rel="noopener">Avisar no WhatsApp</a>` : ''}
+      <span class="small muted">${brl(valorInsc(i))}${i.cupom ? ' · cupom ' + esc(i.cupom) : ''}</span></div>
   </div>`;
 }
 function resumoUniformes() {
@@ -1070,8 +1124,8 @@ function resumoUniformes() {
 }
 function csvInscricoes() {
   const cfg = inscCfg(), q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-  const cab = ['Data', 'Status', 'Categoria', 'Nome da dupla', 'Atleta 1', 'Instagram 1', 'Uniforme 1', 'Atleta 2', 'Instagram 2', 'Uniforme 2', 'Responsável', 'WhatsApp', 'E-mail', ...(cfg.perguntas || []).map(p => p.texto), 'Comprovante'];
-  const lin = [...S.insc].sort((a, b) => a.em - b.em).map(i => [new Date(i.em).toLocaleString('pt-BR'), i.status, catById(i.cat)?.nome || '', i.nomeDupla, i.j1, i.ig1, i.uni1, i.j2, i.ig2, i.uni2, i.resp, i.zap, i.email, ...(cfg.perguntas || []).map(p => (i.extras || {})[p.id]), i.comprovante ? 'sim' : 'não']);
+  const cab = ['Data', 'Status', 'Valor', 'Cupom', 'Categoria', 'Nome da dupla', 'Atleta 1', 'Instagram 1', 'Uniforme 1', 'Atleta 2', 'Instagram 2', 'Uniforme 2', 'Responsável', 'WhatsApp', 'E-mail', ...(cfg.perguntas || []).map(p => p.texto), 'Comprovante'];
+  const lin = [...S.insc].sort((a, b) => a.em - b.em).map(i => [new Date(i.em).toLocaleString('pt-BR'), STATUS_TXT[i.status] || i.status, String(valorInsc(i).toFixed(2)).replace('.', ','), i.cupom || '', catById(i.cat)?.nome || '', i.nomeDupla, i.j1, i.ig1, i.uni1, i.j2, i.ig2, i.uni2, i.resp, i.zap, i.email, ...(cfg.perguntas || []).map(p => (i.extras || {})[p.id]), i.comprovante ? 'sim' : 'não']);
   const txt = '﻿' + [cab, ...lin].map(r => r.map(q).join(';')).join('\r\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'text/csv;charset=utf-8' }));
   a.download = `inscricoes-${(T().nome || 'torneio').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-')}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
@@ -1088,6 +1142,9 @@ function configInscHTML() {
       <label class="field"><span>O que está incluso (um por linha)</span><textarea id="ic-inc" name="incluso" maxlength="1200" placeholder="Troféus&#10;Brindes&#10;Cobertura fotográfica">${esc(cfg.incluso)}</textarea></label>
       <label class="field"><span>Outros horários do cronograma (um por linha)</span><textarea id="ic-oh" name="outrosHorarios" maxlength="800" placeholder="Domingo 15h · Professor Arena">${esc(cfg.outrosHorarios)}</textarea></label>
       <label class="field full"><span>Aviso final</span><input id="ic-aviso" name="aviso" type="text" maxlength="160" value="${esc(cfg.aviso)}"></label>
+      <label class="field"><span>Inscrições até (data e hora, opcional)</span><input id="ic-ate" name="inscAte" type="datetime-local" value="${prazoInsc() ? new Date(prazoInsc() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''}"></label>
+      <label class="field"><span>Cupons de desconto (um por linha: CODIGO = 10% ou CODIGO = 20)</span><textarea id="ic-cup" name="cupons" maxlength="800" placeholder="AMIGOS10 = 10%&#10;ATLETA = 15">${esc((S.privado?.cupons || []).map(x => `${x.codigo} = ${String(x.valor).replace('.', ',')}${x.tipo === '%' ? '%' : ''}`).join('\n'))}</textarea></label>
+      <p class="small muted full" style="margin:0">O preço por lote (ex.: mais barato até uma data) fica em Categorias › Editar. Os códigos dos cupons ficam guardados só para a organização: a página pública só confere se o código digitado é válido.</p>
       <p class="dica full" style="margin:0">Data, local, Pix e WhatsApp vêm da aba Torneio. O horário e a regra de cada categoria ficam em Categorias &gt; Editar e formam o cronograma automaticamente.</p>
     </section>
     <section class="panel stack" style="gap:12px"><h3>Campos do formulário</h3>
@@ -1121,6 +1178,7 @@ function configInscHTML() {
 function lerInscCfg() {
   const f = document.querySelector('form[data-form="inscCfg"]'); const cfg = inscCfg(); if (!f) return cfg;
   const g = n => f.querySelector(`[name="${n}"]`);
+  cfg.cupons = inscCfg().cupons || [];
   ['edicao', 'datas', 'instagram', 'pixBanco', 'boasVindas', 'incluso', 'outrosHorarios', 'aviso', 'tamanhos'].forEach(n => { cfg[n] = String(g(n)?.value || '').trim(); });
   ['instagramAtletas', 'uniforme', 'nomeDupla', 'email'].forEach(n => { cfg[n] = !!g(n)?.checked; });
   cfg.perguntas = [...f.querySelectorAll('[data-pergunta]')].map(el => ({ id: el.dataset.pergunta, texto: el.querySelector('[data-p=texto]').value.trim() || 'Pergunta', tipo: el.querySelector('[data-p=tipo]').value, opcoes: el.querySelector('[data-p=opcoes]').value.trim(), obrig: el.querySelector('[data-p=obrig]').checked }));
@@ -1128,22 +1186,32 @@ function lerInscCfg() {
   return cfg;
 }
 
+let minhasLidas = '';
+/** Lê a situação das inscrições feitas neste aparelho (o atleta só consegue ler as próprias). */
+function carregarMinhas(minhas) {
+  const chave = S.tid + ':' + minhas.map(i => i.id).join(','); if (!minhas.length || minhasLidas === chave) return; minhasLidas = chave;
+  ensureAuth().then(() => Promise.all(minhas.map(i => getDoc(R(`torneios/${S.tid}/inscricoes/${i.id}`)).then(d => [i.id, d.exists() ? d.data().status : 'removida'], () => [i.id, null]))))
+    .then(r => { S.minhasSt = Object.fromEntries(r); render(); }).catch(() => { });
+}
 function inscricao() {
   const t = T();
   if (!S.org) {
     const minhas = lsGet('minhas', []).filter(i => i.tid === S.tid);
-    const chipI = s => s === 'aprovada' ? '<span class="chip ok">aprovada</span>' : '<span class="chip sea">aguardando</span>';
-    return paginaInscricao() + (minhas.length && !S.inscOk ? `<section class="panel" style="margin-top:22px"><h3>Inscrições enviadas deste aparelho</h3><div class="games">${minhas.map(i => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto"><div class="t">${esc(nomeInsc(i))} <span class="small muted">· ${esc(catById(i.cat)?.nome || '')}</span></div>${chipI((sorteadas(catById(i.cat)) ? atletas().some(a => a.cat === i.cat && a.nome === i.j1) : duplas().some(d => d.cat === i.cat && d.j1 === i.j1 && d.j2 === i.j2)) ? 'aprovada' : '')}</div>`).join('')}</div></section>` : '');
+    carregarMinhas(minhas);
+    const chipI = s => ({ aprovada: '<span class="chip ok">aprovada</span>', recusada: '<span class="chip">recusada</span>', espera: '<span class="chip sea">lista de espera</span>', pendente: '<span class="chip sea">aguardando aprovação</span>' }[s] || '<span class="chip">enviada</span>');
+    return paginaInscricao() + (minhas.length && !S.inscOk ? `<section class="panel" style="margin-top:22px"><h3>Suas inscrições (neste aparelho)</h3><div class="games">${minhas.map(i => `<div class="game" style="grid-template-columns:minmax(0,1fr) auto"><div class="t">${esc(nomeInsc(i))} <span class="small muted">· ${esc(catById(i.cat)?.nome || '')}</span></div>${chipI(S.minhasSt?.[i.id])}</div>`).join('')}</div></section>` : '');
   }
   const aba = S.inscAba || 'recebidas', cfg = inscCfg();
-  const pend = S.insc.filter(i => i.status === 'pendente'), apr = S.insc.filter(i => i.status === 'aprovada'), rec = S.insc.filter(i => i.status === 'recusada');
-  const abas = [['recebidas', `Recebidas (${S.insc.length})`], ['pagina', 'Configurar página'], ['previa', 'Ver como o atleta']];
+  const pend = S.insc.filter(i => i.status === 'pendente'), apr = S.insc.filter(i => i.status === 'aprovada'), rec = S.insc.filter(i => i.status === 'recusada'), esp = S.insc.filter(i => i.status === 'espera').sort((a, b) => a.em - b.em);
+  const abas = [['recebidas', `Recebidas (${S.insc.length})`], ['financeiro', 'Financeiro'], ['pagina', 'Configurar página'], ['previa', 'Ver como o atleta']];
   let corpo = '';
   if (aba === 'pagina') corpo = configInscHTML();
+  else if (aba === 'financeiro') corpo = financeiroHTML();
   else if (aba === 'previa') corpo = `<p class="dica" style="margin:0">Prévia: é assim que os atletas veem a página. Enviar por aqui cria uma inscrição de verdade.</p>${paginaInscricao()}`;
-  else corpo = `<div class="panel stats"><div class="stat"><b class="num">${pend.length}</b><span class="label">pendentes</span></div><div class="stat"><b class="num">${apr.length}</b><span class="label">aprovadas</span></div><div class="stat"><b class="num">${rec.length}</b><span class="label">recusadas</span></div><div class="stat"><b class="num">${brl(apr.reduce((s, i) => { const c = catById(i.cat); return s + (c ? (c.cobranca === 'atleta' && i.j2 ? c.valor * 2 : c.valor) : 0); }, 0))}</b><span class="label">valor aprovado</span></div></div>
+  else corpo = `<div class="panel stats"><div class="stat"><b class="num">${pend.length}</b><span class="label">pendentes</span></div><div class="stat"><b class="num">${apr.length}</b><span class="label">aprovadas</span></div><div class="stat"><b class="num">${rec.length}</b><span class="label">recusadas</span></div><div class="stat"><b class="num">${brl(apr.reduce((s, i) => s + valorInsc(i), 0))}</b><span class="label">valor aprovado</span></div>${esp.length ? `<div class="stat"><b class="num">${esp.length}</b><span class="label">na lista de espera</span></div>` : ''}</div>
     ${resumoUniformes()}
     <section class="panel stack" style="gap:12px"><h3>Pendentes</h3>${pend.map(i => insDetalhe(i, cfg)).join('') || '<p class="muted" style="margin:0">Nenhuma inscrição pendente.</p>'}</section>
+    ${esp.length ? `<section class="panel stack" style="gap:12px"><h3>Lista de espera</h3><p class="small muted" style="margin:0">Em ordem de chegada. Ao chamar, a inscrição vira pendente e você avisa a dupla pelo WhatsApp para pagar.</p>${esp.map(i => insDetalhe(i, cfg)).join('')}</section>` : ''}
     ${apr.length + rec.length ? `<details class="panel"><summary class="small" style="cursor:pointer">Já decididas (${apr.length + rec.length})</summary><div class="stack" style="gap:12px;margin-top:12px">${[...apr, ...rec].map(i => insDetalhe(i, cfg)).join('')}</div></details>` : ''}`;
   return `<div class="stack"><div class="sect-head"><div><div class="eyebrow">${t.inscricoes ? 'Inscrições abertas' : 'Inscrições fechadas'}</div><h2>Inscrições</h2></div>
     <div class="row"><button class="btn ghost sm" data-act="copiar" data-k="inscricao">Copiar link de inscrição</button>${S.insc.length ? '<button class="btn ghost sm" data-act="baixarCsv">Baixar planilha</button>' : ''}</div></div>
@@ -1291,6 +1359,13 @@ const ACT = {
     toast('Novo link de mesário gerado.');
   }),
   insc: d => decidirInsc(d.id, d.s),
+  chamarEspera: d => confirmar('Chamar esta inscrição da lista de espera? Ela passa a ocupar uma vaga como pendente até o pagamento.', 'Chamar', () => updD(`torneios/${S.tid}/inscricoes/${d.id}`, { status: 'pendente', daEspera: true }).then(() => toast('Inscrição chamada. Use "Avisar no WhatsApp" para pedir o pagamento.'))),
+  aplicarCupom: async () => {
+    const cod = $('#in-cupom')?.value || ''; if (!cod.trim()) { S.cupomOk = null; ajustarFormInsc(document.querySelector('input[name=cat]:checked')?.value); return; }
+    const cp = await validarCupom(cod); S.cupomOk = cp;
+    toast(cp ? `Cupom ${cp.codigo} aplicado: ${cp.tipo === '%' ? cp.valor + '%' : brl(cp.valor)} de desconto.` : 'Cupom inválido.');
+    ajustarFormInsc(document.querySelector('input[name=cat]:checked')?.value);
+  },
   inscAba: d => { if (S.inscAba === 'pagina' && d.k !== 'pagina') S.inscRasc = null; S.inscAba = d.k; S.inscOk = null; render(); },
   novaInsc: () => { S.inscOk = null; render(); window.scrollTo(0, 0); },
   baixarCsv: () => csvInscricoes(),
@@ -1361,7 +1436,7 @@ const FORM = {
   config: fd => { const o = Object.fromEntries(fd); saveT({ nome: o.nome, data: o.data, local: o.local, quadras: o.quadras.split(',').map(s => s.trim()).filter(Boolean), duracao: num(o.duracao, 20, 5), descanso: num(o.descanso, 0, 0), contato: o.contato, pix: o.pix, pixNome: o.pixNome, pixCidade: String(o.pixCidade || '').trim(), inscricoes: fd.has('inscricoes'), opcoes: { comprovante: fd.has('op_comprovante'), desempate: fd.has('op_desempate'), patrocinadores: fd.has('op_patrocinadores'), checkin: fd.has('op_checkin') } }).then(() => toast('Torneio salvo.')); },
   cat: (fd, f) => {
     const o = Object.fromEntries(fd); const id = f.dataset.id;
-    const up = { nome: o.nome, formato: o.formato, chaves: num(o.chaves, 1, 1), classificam: num(o.classificam, 1, 1), extras: num(o.extras, 0, 0), pontos: num(o.pontos, 18, 1), teto: num(o.teto, 0, 0), vagas: num(o.vagas, 2, 2), valor: num(o.valor, 0, 0), cobranca: o.cobranca, vantagem: fd.has('vantagem'), terceiro: fd.has('terceiro'), quadras: fd.getAll('q'), modoDuplas: o.modoDuplas === 'sorteadas' ? 'sorteadas' : 'fixas', potes: fd.has('potes'), finalSets: fd.has('finalSets'), pontosSet: num(o.pontosSet, 18, 1), pontosTie: num(o.pontosTie, 15, 1), cor: o.cor === 'outra' ? MK.normHex(o.corOutra, '') : MK.normHex(o.cor, ''), dia: String(o.dia || ''), hora: String(o.hora || ''), regra: String(o.regra || '').trim().slice(0, 1500) };
+    const up = { nome: o.nome, formato: o.formato, chaves: num(o.chaves, 1, 1), classificam: num(o.classificam, 1, 1), extras: num(o.extras, 0, 0), pontos: num(o.pontos, 18, 1), teto: num(o.teto, 0, 0), vagas: num(o.vagas, 2, 2), valor: num(o.valor, 0, 0), cobranca: o.cobranca, vantagem: fd.has('vantagem'), terceiro: fd.has('terceiro'), quadras: fd.getAll('q'), modoDuplas: o.modoDuplas === 'sorteadas' ? 'sorteadas' : 'fixas', potes: fd.has('potes'), finalSets: fd.has('finalSets'), pontosSet: num(o.pontosSet, 18, 1), pontosTie: num(o.pontosTie, 15, 1), cor: o.cor === 'outra' ? MK.normHex(o.corOutra, '') : MK.normHex(o.cor, ''), dia: String(o.dia || ''), hora: String(o.hora || ''), regra: String(o.regra || '').trim().slice(0, 1500), lotes: L.lerLotes(o.lotes).slice(0, 6) };
     S.editCat = null; saveT({ categorias: cats().map(c => c.id === id ? { ...c, ...up, liberada: c.dia === up.dia && c.hora === up.hora ? !!c.liberada : false } : c) }).then(() => toast('Categoria salva.'));
   },
   addDupla: (fd, f) => { const o = Object.fromEntries(fd); saveT({ duplas: [...duplas(), { id: uid(), cat: S.cat, j1: o.j1.trim(), j2: o.j2.trim(), cabeca: fd.has('cabeca'), chave: null }] }); f.reset(); },
@@ -1405,7 +1480,9 @@ const FORM = {
   insc: async (fd, f) => {
     const o = Object.fromEntries(fd), cfg = inscCfg(), c = catById(o.cat);
     if (!c) return toast('Escolha a categoria.');
-    if (!vagasCat(c)) return toast('Esta categoria está esgotada.');
+    const espera = !vagasCat(c);
+    if (!inscAbertas()) return toast('As inscrições deste torneio estão fechadas.');
+    let cupom = null; if (String(o.cupom || '').trim() && !espera) { cupom = await validarCupom(o.cupom); if (!cupom) return toast('Cupom inválido. Confira o código ou deixe o campo em branco.'); }
     if (String(o.site || '').trim()) return; // campo invisível: só robôs preenchem
     const ind = sorteadas(c); if (ind) o.j2 = '';
     for (const fs of f.querySelectorAll('[data-varias][data-obrig]')) if (!fs.querySelector('input:checked')) return toast('Responda: ' + fs.querySelector('legend').textContent);
@@ -1415,12 +1492,13 @@ const FORM = {
     try {
       const u = await ensureAuth(); const id = uid();
       let img = null;
-      if (opt('comprovante')) {
+      if (opt('comprovante') && !espera) {
         const file = fd.get('foto'); if (!file || !file.size) { volta(); return toast('Anexe a foto ou o print do comprovante do Pix.'); }
         try { img = await comprimirImagem(file, 1400, 700000); } catch (e) { volta(); return toast(e.message === 'formato' ? 'Não consegui abrir esta imagem. Envie um print em JPG ou PNG.' : 'A imagem ficou grande demais. Tente um print da tela do comprovante.'); }
       }
       const cut = (v, n) => String(v || '').trim().slice(0, n);
-      const item = { cat: o.cat, j1: cut(o.j1, 60), j2: cut(o.j2, 60), zap: cut(o.zap, 30), resp: cut(o.resp, 60), status: 'pendente', em: Date.now(), uid: u.uid, comprovante: !!img,
+      const item = { cat: o.cat, j1: cut(o.j1, 60), j2: cut(o.j2, 60), zap: cut(o.zap, 30), resp: cut(o.resp, 60), status: espera ? 'espera' : 'pendente', em: Date.now(), uid: u.uid, comprovante: !!img,
+        valor: totalInsc(c, ind, cupom), cupom: cupom ? cupom.codigo : '',
         email: cut(o.email, 80), ig1: cut(igUser(o.ig1), 40), ig2: ind ? '' : cut(igUser(o.ig2), 40), uni1: cut(o.uni1, 30), uni2: ind ? '' : cut(o.uni2, 30), nomeDupla: ind ? '' : cut(o.nomeDupla, 60),
         extras, aceites: fd.getAll('aceite').map(x => cut(x, 40)).slice(0, 30) };
       // Limite de inscrições por aparelho, conferido também nas regras do banco.
@@ -1432,10 +1510,16 @@ const FORM = {
       b.set(R(`torneios/${S.tid}/inscricoes/${id}`), item); b.set(R(limP), { n });
       await b.commit();
       lsSet('minhas', [...lsGet('minhas', []), { id, tid: S.tid, cat: item.cat, j1: item.j1, j2: item.j2 }]);
-      S.inscOk = { ...item, tid: S.tid }; f.reset(); render(); window.scrollTo(0, 0);
+      S.inscOk = { ...item, tid: S.tid }; S.cupomOk = null; f.reset(); render(); window.scrollTo(0, 0);
     } catch (e) { volta(); erro(e); }
   },
-  inscCfg: () => { const cfg = lerInscCfg(); saveT({ insc: cfg }).then(() => toast('Página de inscrição salva.')); },
+  inscCfg: async (fd) => {
+    const cfg = lerInscCfg(), cups = L.lerCupons(fd.get('cupons'));
+    cfg.cupons = await Promise.all(cups.map(async x => ({ h: await hashCupom(x.codigo), tipo: x.tipo, valor: x.valor })));
+    const ate = fd.get('inscAte') ? new Date(fd.get('inscAte')).getTime() : 0;
+    await setD(`torneios/${S.tid}/privado/config`, { ...(S.privado || {}), cupons: cups });
+    saveT({ insc: cfg, inscAte: Number.isFinite(ate) ? ate : 0 }).then(() => toast('Página de inscrição salva.'));
+  },
 };
 document.addEventListener('submit', e => { e.preventDefault(); const f = e.target; document.activeElement?.blur?.(); S.pend = false; FORM[f.dataset.form]?.(new FormData(f), f); setTimeout(render, 0); });
 
