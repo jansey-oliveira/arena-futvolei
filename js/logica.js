@@ -123,10 +123,24 @@ export function podio(c, duplas, jogos, manuais = {}) {
  * Próximos jogos que podem entrar numa quadra: sem dupla jogando em outra quadra,
  * com a categoria liberada (horário de início já chegou) e a quadra permitida.
  */
-export function fila(jogos, permite = () => true, quadra = null, liberada = () => true) {
+export function fila(jogos, permite = () => true, quadra = null, liberada = () => true, apto = () => true) {
   const ocup = new Set(jogos.filter(j => j.status === 'aovivo').flatMap(j => [j.a, j.b]));
-  return jogos.filter(j => j.status === 'agendado' && j.a && j.b && !ocup.has(j.a) && !ocup.has(j.b) && liberada(j.cat) && (!quadra || permite(j.cat, quadra)))
+  return jogos.filter(j => j.status === 'agendado' && j.a && j.b && !ocup.has(j.a) && !ocup.has(j.b) && liberada(j.cat) && apto(j) && (!quadra || permite(j.cat, quadra)))
     .sort((x, y) => x.ordem - y.ordem);
+}
+
+/** Quanto tempo (ms) ainda falta de descanso para a dupla, contando do fim do último jogo dela. */
+export function descansoRestante(jogos, dupla, agora, descansoMs) {
+  if (!dupla || !(descansoMs > 0)) return 0;
+  const ult = Math.max(0, ...jogos.filter(j => j.status === 'fim' && !j.wo && (j.a === dupla || j.b === dupla) && j.fim).map(j => j.fim));
+  return ult ? Math.max(0, ult + descansoMs - agora) : 0;
+}
+
+/** Desfaz o último ponto registrado no histórico do jogo. Retorna o patch ou null. */
+export function desfazerPonto(j) {
+  const log = [...(j.log || [])]; const u = log.pop(); if (!u) return null;
+  const v = (j[u.k] || 0) - u.d; if (v < 0) return null;
+  return { [u.k]: v, log };
 }
 
 /** Horário de início de uma categoria (timestamp) ou null se não houver horário definido. */

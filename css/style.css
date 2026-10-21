@@ -388,3 +388,19 @@ tr.desist td{opacity:.55}
 .dupla-card summary{cursor:pointer;color:var(--accent-txt)}
 .mj{border-top:1px solid var(--line);padding:8px 0 2px;display:grid;gap:4px}
 .dupla-card>.mj{border-top:0;padding-top:2px}
+
+/* ---------- pacote 2: dia do torneio ---------- */
+.fctl{grid-column:1/-1;display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-bottom:-4px}
+.fctl .link{font-size:.8rem}.fctl .link[disabled]{opacity:.3}
+.espera{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;border-left:3px solid var(--cat);padding:6px 10px;background:var(--surface2);border-radius:var(--r-sm)}
+.hist{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;font-size:.78rem;color:var(--board-dim);margin:4px 0 10px}
+.hist .label{width:100%}
+.tvqr{display:flex;align-items:center;gap:8px;font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--tv-dim);line-height:1.3}
+.tvqr .qr{width:clamp(56px,6vw,92px);height:auto;background:#fff;padding:4px;border-radius:4px;image-rendering:pixelated}
+.chamada{position:absolute;inset:auto 4vw 12vh 4vw;z-index:5;background:var(--cat);color:var(--cat-ink);border-radius:var(--r);padding:2.4vh 3vw;box-shadow:0 20px 80px rgba(0,0,0,.6);animation:chamar .5s ease-out}
+.chamada .eb{font-weight:700;letter-spacing:.24em;text-transform:uppercase;font-size:clamp(14px,1.6vw,26px);opacity:.85}
+.chamada .nm{font-family:var(--f-display);font-size:clamp(32px,5.4vw,96px);line-height:1;display:flex;flex-wrap:wrap;gap:.2em .5em;align-items:baseline}
+.chamada .nm span{opacity:.6}
+.chamada .apel{color:inherit;opacity:.75;font-family:var(--f-body,inherit);font-size:.3em}
+@keyframes chamar{from{transform:translateY(30px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.chamada{animation:none}}

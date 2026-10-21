@@ -142,4 +142,15 @@ assert.ok(px.includes('540580.00'), 'valor no payload');
 assert.ok(px.includes('5914ARENA SAO JOAO') && px.includes('6009SAO PAULO'));
 assert.equal(px.slice(-4), L.crc16(px.slice(0, -4)));
 
+// Descanso mínimo e fila com jogos segurados
+const jd = [{ id: 'f1', status: 'fim', a: 'a', b: 'x', fim: 1000 }, { id: 'p1', status: 'agendado', a: 'a', b: 'c', ordem: 1, cat: 'k' }, { id: 'p2', status: 'agendado', a: 'd', b: 'e', ordem: 2, cat: 'k', segurar: true }];
+assert.equal(L.descansoRestante(jd, 'a', 1000 + 60000, 10 * 60000), 9 * 60000);
+assert.equal(L.descansoRestante(jd, 'c', 5000, 10 * 60000), 0);
+assert.equal(L.descansoRestante(jd, 'a', 1000 + 60000, 0), 0);
+assert.deepEqual(L.fila(jd, () => true, null, () => true, j => !j.segurar && !L.descansoRestante(jd, j.a, 61000, 600000)).map(j => j.id), []);
+assert.deepEqual(L.fila(jd, () => true, null, () => true, j => !j.segurar).map(j => j.id), ['p1']);
+// Desfazer ponto
+assert.deepEqual(L.desfazerPonto({ pa: 3, pb: 2, log: [{ k: 'pa', d: 1 }, { k: 'pb', d: 1 }] }), { pb: 1, log: [{ k: 'pa', d: 1 }] });
+assert.equal(L.desfazerPonto({ pa: 0, pb: 0, log: [] }), null);
+
 console.log('Todos os testes passaram.');

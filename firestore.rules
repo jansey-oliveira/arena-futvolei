@@ -56,7 +56,7 @@ service cloud.firestore {
         allow update: if isOrg()
           || (isMesario()
               && request.resource.data.diff(resource.data).affectedKeys()
-                   .hasOnly(['pa', 'pb', 'status', 'quadra', 'inicio', 'fim', 'vencedor', 'a', 'b', 'sets']));
+                   .hasOnly(['pa', 'pb', 'status', 'quadra', 'inicio', 'fim', 'vencedor', 'a', 'b', 'sets', 'log', 'wo']));
       }
 
       // Guarda o código secreto do link de mesário.
