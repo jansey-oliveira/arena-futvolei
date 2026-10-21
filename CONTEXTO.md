@@ -76,13 +76,20 @@ Sistema web para organizar torneios de futvôlei do sorteio ao pódio, inspirado
 - **Publicação:** push na `main` publica no GitHub Pages em 1 a 2 minutos. Os usuários precisam recarregar (F5).
 - **Commits:** autor `Claude <noreply@anthropic.com>` com Co-Authored-By e link da sessão.
 
+## Funcionalidades adicionadas em 21/10/2026 (pacotes 1 a 5)
+- **Pacote 1:** a fila respeita o horário da categoria (`liberada` adianta), o nome da dupla aparece (`apelido`), editar e trocar atleta, W.O. (`wo`), desistência (`desistiu`), QR Pix BR Code (`L.pixPayload`, campo `pixCidade`), "Onde eu jogo?" e seguir dupla (localStorage `sigo_{tid}`), duplicar torneio, limite de 5 inscrições por aparelho (`limites/{uid}`, gravado em lote com a inscrição).
+- **Pacote 2:** check-in (`opcoes.checkin`, `dupla.presente`), descanso mínimo (`descanso` em minutos), segurar e reordenar a fila (`segurar`, troca de `ordem`), `log` de pontos e desfazer no mesário, cache persistente do Firestore e `sw.js` (offline), chamada com som e QR no telão.
+- **Pacote 3:** lista de espera (`status: 'espera'`, `daEspera`), lotes por categoria (`lotes`), cupons (códigos em `privado/config.cupons` e hash SHA-256 em `insc.cupons`), prazo (`inscAte`), `valor` e `cupom` na inscrição, o atleta lê a própria inscrição (`allow get` pelo `uid`), WhatsApp com mensagem pronta e aba Financeiro.
+- **Pacote 4:** arte do pódio (canvas 1080 × 1350), relatório para impressão e CSV de resultados, ranking de circuito (`circuito`, `pontosRanking`, `resultados` publicados por categoria, `L.colocacoes`, `L.rankingCircuito`), galeria (`fotos` miniatura e `fotosFull`, `fotosN`, `album`) e aba Torneios.
+- **Pacote 5:** `clientes/{email}` com plano e limites, criação de torneio pelo cliente (`dono`, `limites`, regras `criaComoCliente`, `dentroDoPlano`, `criadorNovo`), `pedidos` com comprovante, painel Admin, backup em JSON e restauração. Os planos e limites ficam em `js/produto.js` (`PRODUTO.pix` ainda vazio).
+
 ## Limitações conhecidas
 1. Todo o torneio (categorias, duplas, atletas, marca com logo) fica em **um documento** (limite de 1 MB do Firestore). Torneios muito grandes, com logo pesado, podem chegar perto.
-2. **Planos não são aplicados no sistema.** A ativação é manual: o administrador cria o torneio e adiciona o e-mail do cliente como organizador. Não há cobrança automática.
+2. **A cobrança dos planos é semiautomática.** O cliente paga pelo Pix e envia o comprovante, e o administrador aprova no painel. Não há confirmação automática do pagamento, porque isso exige um servidor (Cloud Functions no plano pago ou um gateway).
 3. Cota gratuita do Firebase: cerca de 50 mil leituras e 20 mil gravações por dia. Cada visitante assina a lista de **todos** os torneios.
 4. Sem **testes automatizados das regras** (o emulador não baixa neste ambiente) e sem CI.
-5. **Sem modo offline:** mesário e telão precisam de internet.
-6. O atleta não edita nem acompanha a própria inscrição depois de enviar (só um registro em `localStorage`).
+5. **Offline parcial:** pontos e site funcionam sem internet, mas chamar um jogo novo precisa de conexão (usa transação).
+6. O atleta acompanha a inscrição só no aparelho em que se inscreveu e não consegue editá-la.
 7. Erro de digitação "ao vvo" na descrição do repositório no GitHub.
 
 ## Melhorias sugeridas (por prioridade)

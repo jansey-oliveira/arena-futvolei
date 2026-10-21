@@ -19,6 +19,14 @@ Funcionalidades opcionais (cada uma pode ser desligada em **Torneio > Funcionali
 - **Desempate manual**: quando duas duplas empatam em vitórias, saldo e pontos, o organizador define a ordem com ▲ ▼ na classificação.
 - **Patrocinadores com logo e QR code**: cadastro por cota (master, ouro, prata, apoio), com frase e link. Aparecem no telão e no link público.
 
+Também inclui:
+
+- **Dia do torneio**: horário de início por categoria (a fila respeita), check-in das duplas, descanso mínimo entre jogos, W.O. e desistência, fila reordenável (▲ ▼ e "segurar"), histórico e "desfazer" no mesário, placar que funciona sem internet e chamada com som no telão, com QR code do link ao vivo.
+- **Atletas**: busca "Onde eu jogo?" com o próximo jogo e o horário previsto, seguir duplas, nome da dupla em todas as telas e situação da inscrição no aparelho.
+- **Inscrições e financeiro**: QR code Pix com o valor, lotes de preço por data, cupons, lista de espera, prazo, aviso por WhatsApp com mensagem pronta, limite contra envio em massa e aba Financeiro.
+- **Depois do torneio**: arte do pódio para o Instagram, relatório em PDF e planilha de resultados, ranking de circuito entre etapas, galeria de fotos e página com todos os torneios.
+- **Produto**: cadastro de clientes com plano grátis, limites do plano aplicados nas regras do banco, contratação com Pix e comprovante, painel do administrador, duplicar torneio e backup (baixar e restaurar).
+
 O site fica hospedado de graça no **GitHub Pages**. Os dados ficam no **Firebase**, também no plano gratuito.
 
 ---
@@ -97,6 +105,13 @@ Esses valores não são senhas. Quem protege os dados são as regras do passo 4.
 - **Mesário** continua sem cadastro: basta o link de mesário do Painel.
 
 Isso permite vender o sistema para vários campeonatos na mesma instalação: você (administrador) cria o torneio e adiciona o e-mail do cliente como organizador.
+
+## Clientes e planos
+
+- Qualquer pessoa entra com Google em **Minha conta** (ou pelo botão "Começar grátis" da página de planos) e cria a conta no plano grátis: 1 torneio, 1 categoria e até 12 duplas.
+- Os limites ficam na coleção `clientes` e são conferidos pelas regras do banco. Os planos e limites ficam em [`js/produto.js`](js/produto.js).
+- Para contratar, o cliente paga pelo Pix (configure `PRODUTO.pix` em `js/produto.js`) e envia o comprovante. O administrador aprova em **Admin › Pedidos de plano** e os limites são liberados na hora.
+- Em **Admin** o administrador vê clientes, pedidos e torneios, edita planos e limites, baixa e restaura backups.
 
 ## Identidade visual (white-label)
 
