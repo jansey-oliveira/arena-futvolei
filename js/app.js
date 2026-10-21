@@ -546,7 +546,7 @@ const podioHTML = pd => `<div class="podium">${[0, 1, 2].map(i => `<div class="p
 /* ---------- conta do cliente (planos) ---------- */
 const planoDe = id => PLANOS.find(p => p.id === id);
 const dataCurta = ts => ts ? new Date(ts).toLocaleDateString('pt-BR') : '—';
-const zapVendas = txt => PRODUTO.whatsapp ? `https://wa.me/${String(PRODUTO.whatsapp).replace(/\D/g, '')}?text=${encodeURIComponent(txt)}` : '';
+const zapVendas = txt => { const z = String(vendas().zap || '').replace(/\D/g, ''); return z ? `https://wa.me/${z.length <= 11 ? '55' + z : z}?text=${encodeURIComponent(txt)}` : ''; };
 let pedidosLidos = '';
 function carregarMeusPedidos() {
   const em = meuEmail(); if (!em || pedidosLidos === em) return; pedidosLidos = em;
@@ -576,9 +576,14 @@ function contaV() {
         ${typeof p.preco === 'number' && p.limites ? `<button class="btn sm" data-act="pedirPlano" data-id="${p.id}">Contratar</button>` : zapVendas(`Olá! Tenho interesse no plano ${p.nome}. Minha conta: ${S.user.email}`) ? `<a class="btn ghost sm" href="${zapVendas(`Olá! Tenho interesse no plano ${p.nome}. Minha conta: ${S.user.email}`)}" target="_blank" rel="noopener">Falar no WhatsApp</a>` : ''}</article>`).join('')}</div>
       ${S.pedPlano ? pedidoHTML(planoDe(S.pedPlano)) : ''}</section></div>`;
 }
+/* Pix e WhatsApp de vendas dos planos: definidos pelo administrador no painel (config/vendas). */
+let vendasLido = false;
+function carregarVendas() { if (vendasLido || !db) return; vendasLido = true; getDoc(R('config/vendas')).then(d => { S.vendas = d.exists() ? d.data() : {}; render(); }).catch(() => { S.vendas = {}; }); }
+const vendas = () => { carregarVendas(); const v = S.vendas || {}; return { chave: v.chave || PRODUTO.pix?.chave || '', nome: v.nome || PRODUTO.pix?.nome || PRODUTO.nome, cidade: v.cidade || PRODUTO.pix?.cidade || 'BRASIL', zap: v.zap || PRODUTO.whatsapp || '' }; };
 function pedidoHTML(p) {
   if (!p) return '';
-  const cod = PRODUTO.pix?.chave ? L.pixPayload({ chave: PRODUTO.pix.chave, nome: PRODUTO.pix.nome || PRODUTO.nome, cidade: PRODUTO.pix.cidade || 'BRASIL', valor: p.preco, txid: 'PLANO' + p.id.toUpperCase().slice(0, 10) }) : '';
+  const vd = vendas();
+  const cod = vd.chave ? L.pixPayload({ chave: vd.chave, nome: vd.nome, cidade: vd.cidade, valor: p.preco, txid: 'PLANO' + p.id.toUpperCase().slice(0, 10) }) : '';
   let img = ''; if (cod) { try { const q = window.qrcode(0, 'M'); q.addData(cod); q.make(); img = `<img class="qr" src="${q.createDataURL(5, 2)}" alt="QR code Pix do plano">`; } catch { } }
   const wa = zapVendas(`Olá! Quero contratar o plano ${p.nome} (${brl(p.preco)}). Minha conta: ${S.user.email}`);
   return `<form class="panel stack" data-form="pedido" data-plano="${p.id}" style="gap:12px"><h3>Contratar ${esc(p.nome)} · ${brl(p.preco)}</h3>
@@ -597,11 +602,18 @@ function assinarAdmin() {
 }
 const unsubsAdmin = {};
 function adminV() {
-  assinarAdmin();
+  assinarAdmin(); vendas();
   const cls = S.clientes || [], pend = (S.pedidos || []).filter(p => p.status === 'pendente');
   const lim = n => n >= 999 ? '∞' : n;
   return `<div class="stack"><div class="sect-head"><div><div class="eyebrow">Administrador</div><h2>Painel do sistema</h2></div><a class="btn ghost sm" href="https://console.firebase.google.com/project/${esc(firebaseConfig.projectId)}/usage" target="_blank" rel="noopener">Uso do Firebase</a></div>
     <section class="panel stats"><div class="stat"><b class="num">${cls.length}</b><span class="label">clientes</span></div><div class="stat"><b class="num">${S.torneios.length}</b><span class="label">torneios</span></div><div class="stat"><b class="num">${pend.length}</b><span class="label">pedidos pendentes</span></div><div class="stat"><b class="num">${brl((S.pedidos || []).filter(p => p.status === 'aprovado').reduce((s, p) => s + (+p.valor || 0), 0))}</b><span class="label">planos aprovados</span></div></section>
+    <form class="panel form" data-form="vendas"><h3 class="full">Recebimento dos planos</h3>
+      <label class="field"><span>Chave Pix</span><input id="vd-k" name="chave" type="text" maxlength="80" value="${esc(S.vendas?.chave || '')}" placeholder="e-mail, CPF, CNPJ, celular ou chave aleatória"></label>
+      <label class="field"><span>Nome do recebedor</span><input id="vd-n" name="nome" type="text" maxlength="60" value="${esc(S.vendas?.nome || '')}"></label>
+      <label class="field"><span>Cidade do recebedor</span><input id="vd-c" name="cidade" type="text" maxlength="40" value="${esc(S.vendas?.cidade || '')}"></label>
+      <label class="field"><span>WhatsApp de vendas</span><input id="vd-z" name="zap" type="tel" maxlength="30" value="${esc(S.vendas?.zap || PRODUTO.whatsapp || '')}"></label>
+      <p class="small muted full" style="margin:0">Aparece para o cliente com QR code e "Pix copia e cola" na hora de contratar um plano em Minha conta. Sem chave, a contratação segue pelo WhatsApp.</p>
+      <div class="full"><button class="btn sm">Salvar recebimento</button></div></form>
     <section class="panel stack" style="gap:10px"><h3>Pedidos de plano</h3>${pend.length ? pend.map(p => `<div class="espera"><span><b>${esc(planoDe(p.plano)?.nome || p.plano)}</b> · ${brl(p.valor)} · ${esc(p.nome || '')} &lt;${esc(p.email)}&gt; <span class="small muted">· ${dataCurta(p.em)}</span></span><span class="row" style="gap:8px">${p.img ? `<button class="btn ghost sm" data-act="verPedido" data-id="${p.id}">Comprovante</button>` : ''}<button class="btn sm" data-act="aprovarPedido" data-id="${p.id}">Aprovar e liberar</button><button class="link small" data-act="recusarPedido" data-id="${p.id}">Recusar</button></span></div>`).join('') : '<p class="muted" style="margin:0">Nenhum pedido pendente.</p>'}</section>
     <section class="panel stack" style="gap:10px"><h3>Clientes</h3>${cls.length ? `<div class="tw"><table><thead><tr><th>Cliente</th><th>Plano</th><th class="n">Torneios</th><th class="n">Categ.</th><th class="n">Duplas</th><th>Validade</th><th></th></tr></thead><tbody>
       ${cls.map(c => S.editCli === c.email ? `<tr><td colspan="7"><form class="form" data-form="cliente" data-id="${esc(c.email)}">
@@ -1774,6 +1786,10 @@ const FORM = {
     if (pa === pb) return toast('O jogo não pode terminar empatado.');
     if (!L.fimValido(c, pa, pb) && !fd.has('forcar')) return toast(`Placar fora da regra (${regraTxt(c)}). Marque "aceitar fora da regra" para salvar mesmo assim.`);
     S.editJogo = null; finalizar(j, pa, pb).then(() => toast('Resultado salvo. Classificação recalculada.'));
+  },
+  vendas: async fd => {
+    const v = Object.fromEntries(['chave', 'nome', 'cidade', 'zap'].map(k => [k, String(fd.get(k) || '').trim()]));
+    try { await setDoc(R('config/vendas'), v); S.vendas = v; render(); toast('Recebimento dos planos salvo.'); } catch (e) { erro(e); }
   },
   cadastro: async fd => {
     const em = meuEmail(); if (!em) return; const cut = (v, n) => String(v || '').trim().slice(0, n), g = planoDe('experimente').limites;

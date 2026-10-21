@@ -68,6 +68,12 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // Configurações do sistema (ex.: Pix e WhatsApp de vendas dos planos). Todos leem; só administradores mudam.
+    match /config/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Lista de administradores: só se cria pelo Console do Firebase.
     match /admins/{email} {
       allow read: if request.auth != null && request.auth.token.email == email;

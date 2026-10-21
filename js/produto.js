@@ -9,7 +9,7 @@ export const PRODUTO = {
   email: '',
   instagram: '', // sem @
   manual: 'docs/manual-de-uso.pdf',
-  // Pix para receber os planos (aparece com QR code em "Minha conta"). Vazio = a contratação segue pelo WhatsApp.
+  // Pix para receber os planos: o administrador preenche em Admin > Recebimento dos planos (este valor é só um padrão).
   pix: { chave: '', nome: '', cidade: '' },
 };
 
