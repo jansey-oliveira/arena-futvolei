@@ -105,6 +105,8 @@ section{padding:96px 0}
 .duo .tela.cel2:last-child{margin-top:48px}
 .fig{position:relative}
 .fig .cel{width:34%;right:-10px;bottom:-26px}
+.dpod{grid-template-columns:.8fr 1.2fr;align-items:center}
+.dpod .tela:first-child{border-radius:6px}
 
 /* como funciona */
 .passos{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;counter-reset:p}
@@ -236,48 +238,71 @@ dialog .aviso{font-size:.78rem;color:var(--muted);margin:0}
 
 <section id="funcionalidades">
   <div class="wrap">
-    <div class="cab"><div class="eb">Funcionalidades</div><h2>Tudo o que o dia do torneio pede, num lugar só</h2><p>Do primeiro inscrito à foto do pódio, o organizador acompanha tudo pelo computador ou pelo celular, e cada pessoa vê só o que precisa.</p></div>
+    <div class="cab"><div class="eb">Funcionalidades</div><h2>Tudo o que o torneio pede, num lugar só</h2><p>Do primeiro inscrito à arte do pódio, o organizador acompanha tudo pelo computador ou pelo celular, e cada pessoa vê só o que precisa.</p></div>
     <div class="grupos">
-      <div class="grupo"><h3>Antes do torneio <small>inscrições e montagem</small></h3>
+      <div class="grupo"><h3>Inscrições e pagamentos <small>dinheiro direto na sua conta</small></h3>
         <div class="cards">
-          <div class="card"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><h4>Página de inscrição completa</h4><p>Boas-vindas, datas, local com mapa, cronograma, o que está incluso e formulário em etapas, pronto para o celular.</p></div>
-          <div class="card"><svg viewBox="0 0 24 24"><path d="M12 3l9 9-9 9-9-9z"/><path d="M12 8l4 4-4 4-4-4z"/></svg><h4>Pagamento por Pix</h4><p>Chave com botão de copiar e foto do comprovante anexada. Você confere e aprova em segundos.</p></div>
-          <div class="card"><span class="novo">Exclusivo</span><svg viewBox="0 0 24 24"><path d="M9 11l2 2 4-4"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg><h4>Termos e perguntas extras</h4><p>Aptidão física, uso de imagem e regra da categoria com aceite obrigatório, além das perguntas que você quiser criar.</p></div>
-          <div class="card"><span class="novo">Exclusivo</span><svg viewBox="0 0 24 24"><path d="M8 4l4 3 4-3 4 4-3 3v9H7v-9L4 8z"/></svg><h4>Tamanhos de uniforme</h4><p>Cada atleta escolhe o tamanho e o sistema soma tudo para você encomendar sem planilha paralela.</p></div>
-          <div class="card"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg><h4>Várias categorias</h4><p>Iniciante, Misto, Feminino… cada uma com formato, pontuação, vagas, valor, horário e cor próprios.</p></div>
-          <div class="card"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="4"/></svg><h4>Vagas controladas</h4><p>A vaga fica reservada enquanto a inscrição aguarda aprovação e volta a abrir se for recusada.</p></div>
-          <div class="card"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4z"/></svg><h4>Lista do WhatsApp</h4><p>Já tem as duplas no grupo? Cole a lista e o sistema reconhece todas de uma vez.</p></div>
-          <div class="card"><span class="novo">Exclusivo</span><svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="16" r="3"/><path d="M14 6h5v5M10 18H5v-5"/></svg><h4>Duplas sorteadas</h4><p>Atletas se inscrevem sozinhos e o sistema forma as duplas, com potes para equilibrar níveis ou montar o misto.</p></div>
-          <div class="card"><svg viewBox="0 0 24 24"><path d="M3 15h18M7 15V5h10v10M5 21h14"/></svg><h4>Planilha das inscrições</h4><p>Baixe todas as inscrições com contatos, uniformes e respostas para abrir no Excel ou no Google Planilhas.</p></div>
+          <div class="card"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><h4>Página de inscrição completa</h4><p>Boas-vindas, datas, local com mapa, cronograma automático, o que está incluso e formulário em etapas, pronto para o celular.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM18 18h3v3"/></svg><h4>QR code Pix com o valor</h4><p>O atleta escolhe a categoria e paga lendo o QR code ou com o "Pix copia e cola", já com o valor certo. Depois anexa o comprovante.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg><h4>Lotes de preço e cupons</h4><p>Preço mais baixo até uma data e cupons de desconto em % ou em reais. Os códigos ficam visíveis só para a organização.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/><path d="M18 14v6M15 17h6"/></svg><h4>Lista de espera</h4><p>Categoria cheia não perde ninguém: a dupla entra na fila sem pagar e é chamada quando abre vaga.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><h4>Prazo automático</h4><p>Escolha até quando vão as inscrições. O formulário fecha sozinho na hora marcada.</p></div>
+          <div class="card"><svg viewBox="0 0 24 24"><path d="M9 11l2 2 4-4"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg><h4>Termos e perguntas extras</h4><p>Aptidão física, uso de imagem e regra da categoria com aceite obrigatório, além das perguntas que você quiser criar.</p></div>
+          <div class="card"><svg viewBox="0 0 24 24"><path d="M8 4l4 3 4-3 4 4-3 3v9H7v-9L4 8z"/></svg><h4>Tamanhos de uniforme</h4><p>Cada atleta escolhe o tamanho e o sistema soma tudo para você encomendar.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4z"/></svg><h4>Aviso no WhatsApp</h4><p>Mensagem pronta para cada situação: inscrição recebida, aprovada, recusada, na lista de espera ou vaga aberta.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><h4>Financeiro por categoria</h4><p>Valor recebido, a conferir, lista de espera, cupons usados e o potencial com as vagas cheias. Planilha com tudo.</p></div>
         </div>
       </div>
-      <div class="grupo"><h3>Na quadra <small>do primeiro saque à final</small></h3>
+      <div class="grupo"><h3>Montagem <small>categorias, duplas e chaves</small></h3>
         <div class="cards">
-          <div class="card"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M12 4v16M3 12h18"/></svg><h4>Sorteio de chaves</h4><p>Distribuição equilibrada com cabeças de chave e todos os jogos da fase de grupos gerados na hora.</p></div>
-          <div class="card"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg><h4>Mesário pelo celular</h4><p>Link secreto, sem cadastro. Escolhe a quadra, chama o próximo jogo e marca ponto a ponto com + e −.</p></div>
-          <div class="card"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><h4>Fila e horários previstos</h4><p>Uma fila única para todas as quadras e categorias, com a hora aproximada de cada jogo.</p></div>
+          <div class="card"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg><h4>Várias categorias</h4><p>Formato, pontuação, vagas, valor, cor, regra e horário de início próprios para cada categoria.</p></div>
+          <div class="card"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4z"/></svg><h4>Lista do WhatsApp</h4><p>Já tem as duplas no grupo? Cole a lista e o sistema reconhece todas de uma vez.</p></div>
+          <div class="card"><svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="16" r="3"/><path d="M14 6h5v5M10 18H5v-5"/></svg><h4>Duplas sorteadas</h4><p>Atletas se inscrevem sozinhos e o sistema forma as duplas, com potes para equilibrar níveis ou montar o misto.</p></div>
+          <div class="card"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M12 4v16M3 12h18"/></svg><h4>Sorteio de chaves</h4><p>Distribuição equilibrada com cabeças de chave e todos os jogos gerados na hora.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16z"/></svg><h4>Nome da dupla e troca de atleta</h4><p>A dupla aparece com o nome dela no telão. Atleta machucado é substituído sem perder os jogos.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></svg><h4>Próxima etapa em 1 clique</h4><p>Duplique o torneio com categorias, regras, marca, página de inscrição, patrocinadores e equipe.</p></div>
+        </div>
+      </div>
+      <div class="grupo"><h3>Dia do torneio <small>do primeiro saque à final</small></h3>
+        <div class="cards">
+          <div class="card"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg><h4>Mesário pelo celular</h4><p>Link secreto, sem cadastro. Chama o próximo jogo e marca ponto a ponto, com histórico e "desfazer".</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><path d="M2 8.5a15 15 0 0120 0M5 12a10 10 0 0114 0M8.5 15.5a5 5 0 017 0"/><circle cx="12" cy="19" r="1"/><path d="M3 3l18 18"/></svg><h4>Funciona sem internet</h4><p>O 4G caiu? O mesário continua marcando e o placar sincroniza sozinho quando a conexão volta.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/><path d="M18 14v6M15 17h6"/></svg><h4>Fila inteligente</h4><p>Respeita o horário de cada categoria e o descanso mínimo das duplas. Você reordena ou segura jogos com um toque.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><path d="M16 11l2 2 4-4"/></svg><h4>Check-in das duplas</h4><p>Só entram na fila os jogos de quem já chegou. O painel mostra quem falta e o próximo jogo de cada um.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 8l8 8M16 8l-8 8"/></svg><h4>W.O. e desistência</h4><p>W.O. com um clique e desistência que transforma os jogos restantes em W.O., inclusive no mata-mata.</p></div>
           <div class="card"><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><h4>Classificação automática</h4><p>Vitórias, saldo, pontos feitos e confronto direto, recalculados a cada ponto lançado.</p></div>
-          <div class="card"><span class="novo">Exclusivo</span><svg viewBox="0 0 24 24"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg><h4>Desempate manual</h4><p>Empate total? O organizador define a ordem com ▲ ▼ depois do jogo de desempate.</p></div>
+          <div class="card"><svg viewBox="0 0 24 24"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg><h4>Desempate manual</h4><p>Empate total? O organizador define a ordem com ▲ ▼ depois do jogo de desempate.</p></div>
           <div class="card"><svg viewBox="0 0 24 24"><path d="M3 5h5v4H3zM3 15h5v4H3zM8 7h4v10H8M12 12h5M17 10h4v4h-4z"/></svg><h4>Mata-mata automático</h4><p>Oitavas, quartas, semi, final e 3º lugar, com o vencedor avançando sozinho.</p></div>
           <div class="card"><svg viewBox="0 0 24 24"><path d="M4 12h4l2-5 4 10 2-5h4"/></svg><h4>Final em melhor de 3 sets</h4><p>Pontuação própria para os sets e para o tie-break, com o mesário fechando set a set.</p></div>
-          <div class="card"><svg viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16z"/></svg><h4>Correção de placar</h4><p>Lançou errado? O organizador corrige e tudo é recalculado, até o mata-mata.</p></div>
         </div>
       </div>
-      <div class="grupo"><h3>Para a torcida e os patrocinadores <small>visibilidade</small></h3>
+      <div class="grupo"><h3>Torcida, telão e patrocinadores <small>todo mundo acompanhando</small></h3>
         <div class="cards">
           <div class="card"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/></svg><h4>Link público ao vivo</h4><p>Atletas e torcida acompanham jogos, chaves e classificação pelo celular, sem login.</p></div>
-          <div class="card"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="1"/><path d="M8 21h8M12 17v4"/></svg><h4>Modo TV</h4><p>Tela cheia para o telão, alternando jogos em quadra, próximos jogos, chaves e pódio.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg><h4>"Onde eu jogo?"</h4><p>O atleta digita o nome e vê o próximo jogo, o adversário, a quadra e o horário previsto. Pode seguir a dupla.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="1"/><path d="M8 21h8M12 17v4"/></svg><h4>Telão com chamada</h4><p>Quando um jogo entra em quadra, o telão mostra a chamada em destaque e um QR code leva a torcida ao link ao vivo.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/></svg><h4>Aviso sonoro</h4><p>Com o som ligado, o telão toca um aviso e fala o nome das duplas chamadas para a quadra.</p></div>
           <div class="card"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM18 18h3v3"/></svg><h4>Patrocinadores com QR code</h4><p>Cotas master, ouro, prata e apoio, com logo, frase e QR code no telão e no link público.</p></div>
-          <div class="card"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0z"/><path d="M17 5h3v2a3 3 0 01-3 3M7 5H4v2a3 3 0 003 3"/></svg><h4>Pódio em destaque</h4><p>Campeões, vices e terceiros aparecem no painel e no telão assim que a final termina.</p></div>
           <div class="card"><svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="3"/><path d="M9 6h6"/></svg><h4>Vira app no celular</h4><p>Adicione à tela inicial e abra como aplicativo, com o ícone do evento. Nada para baixar na loja.</p></div>
         </div>
       </div>
-      <div class="grupo"><h3>Sua marca e sua equipe <small>organização profissional</small></h3>
+      <div class="grupo"><h3>Depois do torneio <small>resultado que rende</small></h3>
         <div class="cards">
-          <div class="card"><span class="novo">Exclusivo</span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 000 18c1.5 0 2-1 2-2s-1-1.5-1-2.5 1-1.5 2-1.5h2a4 4 0 004-4c0-4.5-4-8-9-8z"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="16" cy="10" r="1"/></svg><h4>Identidade visual completa</h4><p>Logo, nome, lema, cores, fontes e cantos do seu evento em todas as telas, com prévia ao vivo e contraste corrigido sozinho.</p></div>
-          <div class="card"><span class="novo">Exclusivo</span><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="8" cy="7" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="10" cy="17" r="2"/></svg><h4>Cor por categoria</h4><p>Cada categoria com a sua cor, como os uniformes, nos jogos, nas chaves, no placar e no telão.</p></div>
-          <div class="card"><span class="novo">Exclusivo</span><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 15c3 0 5 1.6 5 4"/></svg><h4>Organizadores por torneio</h4><p>Divida o trabalho: cada pessoa da equipe edita só os torneios em que foi adicionada.</p></div>
-          <div class="card"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg><h4>Dados protegidos</h4><p>Telefones, e-mails e comprovantes só aparecem para a organização. O público vê apenas duplas e resultados.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/></svg><h4>Arte do pódio para o Instagram</h4><p>Imagem pronta com a marca do evento, a categoria e os campeões, no formato do feed.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 13h8M9 17h6"/></svg><h4>Relatório e planilha</h4><p>Pódios, classificação e todos os jogos em PDF para imprimir, e planilha com placares e colocação final.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><path d="M4 20h4v-6H4zM10 20h4V8h-4zM16 20h4v-9h-4z"/><path d="M11 4l1-2 1 2 2 .3-1.5 1.4.4 2.1-1.9-1-1.9 1 .4-2.1L9 4.3z"/></svg><h4>Ranking de circuito</h4><p>As etapas somam pontos para cada atleta, por categoria, com pontuação configurável e busca.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/></svg><h4>Galeria de fotos</h4><p>Fotos por categoria e legenda no próprio site, com link para o álbum em alta resolução.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><h4>Agenda de torneios</h4><p>Próximos eventos, os de hoje e os anteriores, com atalho para as inscrições abertas.</p></div>
+        </div>
+      </div>
+      <div class="grupo"><h3>Sua marca e sua gestão <small>organização profissional</small></h3>
+        <div class="cards">
+          <div class="card"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="16" cy="10" r="1"/><path d="M12 21c1.5 0 2-1 2-2s-1-1.5-1-2.5 1-1.5 2-1.5h2a4 4 0 004-4"/></svg><h4>Identidade visual completa</h4><p>Logo, nome, lema, cores, fontes e cantos do seu evento em todas as telas, com prévia ao vivo e contraste corrigido sozinho.</p></div>
+          <div class="card"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="8" cy="7" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="10" cy="17" r="2"/></svg><h4>Cor por categoria</h4><p>Cada categoria com a sua cor, como os uniformes, nos jogos, nas chaves, no placar e no telão.</p></div>
+          <div class="card"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 15c3 0 5 1.6 5 4"/></svg><h4>Organizadores por torneio</h4><p>Divida o trabalho: cada pessoa da equipe edita só os torneios em que foi adicionada.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/><path d="M19 3v4M17 5h4"/></svg><h4>Comece sozinho</h4><p>Crie a conta grátis com o Google e monte o primeiro torneio na hora. Para crescer, contrate um plano pelo Pix.</p></div>
+          <div class="card"><span class="novo">Novo</span><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/></svg><h4>Backup do torneio</h4><p>Baixe uma cópia completa do torneio quando quiser e restaure se precisar.</p></div>
+          <div class="card"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg><h4>Dados protegidos</h4><p>Telefones, e-mails, comprovantes e cupons só aparecem para a organização. O público vê duplas e resultados.</p></div>
           <div class="card"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 13h8M9 17h6"/></svg><h4>Manual de uso em PDF</h4><p>Guia ilustrado para organizador, mesário e equipe, com checklist do torneio.</p></div>
         </div>
       </div>
@@ -291,18 +316,19 @@ dialog .aviso{font-size:.78rem;color:var(--muted);margin:0}
       <div class="txt">
         <div class="eb">Inscrições</div>
         <h2>Inscrição pronta em minutos, dinheiro direto na sua conta</h2>
-        <p>Envie um link no grupo. O atleta escolhe a categoria, preenche os dados da dupla, aceita os termos, paga pelo Pix e anexa o comprovante. Você só confere e aprova.</p>
+        <p>Envie um link no grupo. O atleta escolhe a categoria, preenche os dados da dupla, aceita os termos e paga pelo QR code Pix com o valor certo. Você só confere e aprova.</p>
         <ul class="lista">
-          <li>Valor por dupla ou por atleta, com vagas fechando sozinhas</li>
-          <li>Instagram, tamanho de uniforme, nome da dupla e e-mail, se você quiser</li>
-          <li>Perguntas extras de resposta curta, parágrafo ou múltipla escolha</li>
-          <li>Painel com pendentes, aprovadas, valor recebido e resumo de uniformes</li>
+          <li>QR code e "Pix copia e cola" com o valor da categoria</li>
+          <li>Lotes de preço por data e cupons de desconto</li>
+          <li>Lista de espera quando a categoria enche</li>
+          <li>Aviso no WhatsApp com mensagem pronta e aba Financeiro</li>
+          <li>O atleta acompanha a situação da inscrição pelo celular</li>
           <li>Inscrição aprovada já vira dupla na chave</li>
         </ul>
       </div>
       <div class="duo">
         <div class="tela cel2"><img src="img/site/cel-inscricao.webp" width="600" height="1300" alt="Página de inscrição no celular" loading="lazy"></div>
-        <div class="tela cel2"><img src="img/site/cel-form.webp" width="600" height="1300" alt="Formulário de inscrição com termos de aceite" loading="lazy"></div>
+        <div class="tela cel2"><img src="img/site/cel-pix.webp" width="600" height="1300" alt="Pagamento com QR code Pix no celular" loading="lazy"></div>
       </div>
     </div>
 
@@ -310,21 +336,39 @@ dialog .aviso{font-size:.78rem;color:var(--muted);margin:0}
       <div class="txt">
         <div class="eb">Na quadra</div>
         <h2>Cada ponto marcado aparece em todo lugar</h2>
-        <p>Um mesário por quadra, com o celular na mão. O placar chega na hora ao painel do organizador, ao link da torcida e ao telão da arena.</p>
+        <p>Um mesário por quadra, com o celular na mão. O placar chega na hora ao painel do organizador, ao link da torcida e ao telão, que chama cada jogo em destaque e com som.</p>
         <ul class="lista">
-          <li>Fila única para todas as quadras, sem jogo parado</li>
-          <li>Dois mesários nunca chamam o mesmo jogo</li>
-          <li>O botão de encerrar só libera quando o placar cumpre a regra</li>
-          <li>Vencedor avança sozinho no mata-mata</li>
-          <li>Link de mesário pode ser trocado a qualquer momento</li>
+          <li>Fila que respeita horário das categorias, check-in e descanso das duplas</li>
+          <li>Continua marcando mesmo se a internet cair</li>
+          <li>Histórico de pontos e "desfazer" para o mesário</li>
+          <li>W.O. com um clique e vencedor avançando sozinho</li>
+          <li>"Onde eu jogo?" para o atleta saber a quadra e o horário</li>
         </ul>
       </div>
       <div class="fig">
-        <div class="tela"><div class="barra" aria-hidden="true"><i></i><i></i><i></i></div><img src="img/site/telao.webp" width="1600" height="1000" alt="Modo TV com os próximos jogos" loading="lazy"></div>
+        <div class="tela"><div class="barra" aria-hidden="true"><i></i><i></i><i></i></div><img src="img/site/telao-chamada.webp" width="1600" height="1000" alt="Telão chamando um jogo para a quadra" loading="lazy"></div>
       </div>
     </div>
 
     <div class="dest">
+      <div class="txt">
+        <div class="eb">Depois do torneio</div>
+        <h2>O resultado vira post, ranking e história</h2>
+        <p>Assim que a final termina, a arte do pódio fica pronta para o Instagram. Os resultados de cada etapa alimentam o ranking do circuito, e as fotos ficam na galeria do evento.</p>
+        <ul class="lista">
+          <li>Arte do pódio com a marca do seu evento</li>
+          <li>Ranking individual somando as etapas do circuito</li>
+          <li>Relatório em PDF e planilha de resultados</li>
+          <li>Galeria de fotos por categoria</li>
+        </ul>
+      </div>
+      <div class="duo dpod">
+        <div class="tela"><img src="img/site/arte-podio.webp" width="720" height="900" alt="Arte do pódio gerada pelo sistema" loading="lazy"></div>
+        <div class="tela"><div class="barra" aria-hidden="true"><i></i><i></i><i></i></div><img src="img/site/ranking.webp" width="1600" height="1000" alt="Ranking de circuito" loading="lazy"></div>
+      </div>
+    </div>
+
+    <div class="dest inv">
       <div class="txt">
         <div class="eb">Sua marca</div>
         <h2>O sistema veste a camisa do seu evento</h2>
@@ -346,7 +390,7 @@ dialog .aviso{font-size:.78rem;color:var(--muted);margin:0}
   <div class="wrap">
     <div class="cab"><div class="eb">Como funciona</div><h2>Quatro passos até o pódio</h2></div>
     <div class="passos">
-      <div class="passo"><h3>Crie o torneio</h3><p>Nome, data, local, quadras, chave Pix e a identidade visual do evento.</p></div>
+      <div class="passo"><h3>Crie o torneio</h3><p>Entre com o Google, crie a conta grátis e preencha nome, data, local, quadras, Pix e a identidade visual.</p></div>
       <div class="passo"><h3>Monte as categorias</h3><p>Formato, pontuação, vagas, valor, horário e regra de cada categoria.</p></div>
       <div class="passo"><h3>Abra as inscrições</h3><p>Compartilhe o link, confira os comprovantes e aprove as duplas.</p></div>
       <div class="passo"><h3>Sorteie e jogue</h3><p>Chaves em um clique, mesários nas quadras e telão ligado até a final.</p></div>
@@ -372,14 +416,16 @@ dialog .aviso{font-size:.78rem;color:var(--muted);margin:0}
         <details><summary>O dinheiro das inscrições passa por vocês?</summary><p>Não. O atleta paga direto na sua chave Pix e anexa o comprovante. Você confere e aprova no painel.</p></details>
         <details><summary>Como funciona o mesário?</summary><p>Você envia um link secreto para cada mesário. Ele escolhe a quadra, chama o próximo jogo e marca os pontos. Se o link vazar, você gera outro e o antigo para de funcionar.</p></details>
         <details><summary>Dá para ter várias quadras e categorias ao mesmo tempo?</summary><p>Sim. Todas as categorias entram numa fila única, e cada categoria pode ser limitada a algumas quadras e ter seu próprio horário de início.</p></details>
-        <details><summary>E se um placar for lançado errado?</summary><p>O organizador corrige na aba Jogos e a classificação, as chaves e o mata-mata são recalculados na hora.</p></details>
+        <details><summary>E se um placar for lançado errado?</summary><p>O mesário desfaz o último ponto, e o organizador corrige qualquer resultado na aba Jogos. Classificação, chaves e mata-mata são recalculados na hora.</p></details>
+        <details><summary>E quando uma dupla não aparece?</summary><p>Com o check-in ligado, os jogos dela nem entram na fila. Você registra o W.O. com um clique, ou a desistência, e os adversários avançam.</p></details>
         <details><summary>Posso dividir a organização com outras pessoas?</summary><p>Sim. Adicione o e-mail Google de cada pessoa como organizadora do torneio. Ela edita só aquele torneio.</p></details>
       </div>
       <div>
         <details><summary>Consigo usar o logo e as cores do meu evento?</summary><p>Sim, em todos os planos. Na aba Identidade visual você envia o logo e escolhe cores e fontes. No plano Marca própria o sistema inteiro ganha o seu nome, endereço e ícone.</p></details>
         <details><summary>Funciona para duplas sorteadas e torneios mistos?</summary><p>Sim. Os atletas se inscrevem individualmente e o sistema sorteia as duplas, com 2 potes para equilibrar níveis ou formar homem e mulher.</p></details>
         <details><summary>Quais formatos de disputa existem?</summary><p>Grupos com mata-mata, todos contra todos e mata-mata direto, com jogos até 18 (ou a pontuação que você definir), vantagem de 2, teto de pontos, disputa de 3º lugar e final em melhor de 3 sets.</p></details>
-        <details><summary>Preciso de internet na arena?</summary><p>Sim. Mesários, telão e organizador precisam de conexão. O 4G do celular é suficiente.</p></details>
+        <details><summary>Preciso de internet na arena?</summary><p>Basta o 4G do celular. Se a conexão cair no meio do jogo, o mesário continua marcando e o placar sincroniza sozinho quando ela voltar.</p></details>
+        <details><summary>Dá para fazer ranking de um circuito?</summary><p>Sim. Dê o mesmo nome de circuito às etapas e publique o resultado de cada categoria. O ranking soma os pontos de cada atleta, com a pontuação que você definir.</p></details>
         <details><summary>Como contrato um plano?</summary><p>Clique em "Começar grátis", entre com sua conta Google e crie seu primeiro torneio na hora. Para crescer, contrate um plano em "Minha conta": você paga pelo Pix, envia o comprovante e o plano é liberado assim que o pagamento é confirmado.</p></details>
         <details><summary>Tem treinamento?</summary><p>Todo cliente recebe o manual de uso ilustrado em PDF. No plano Temporada ajudamos a montar o primeiro torneio, e no Marca própria treinamos a equipe.</p></details>
       </div>

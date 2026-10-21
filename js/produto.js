@@ -19,7 +19,7 @@ export const PLANOS = [
   {
     id: 'experimente', nome: 'Experimente', preco: 0, periodo: '',
     resumo: 'Para conhecer o sistema com um torneio de verdade.',
-    itens: ['1 torneio', '1 categoria com até 12 duplas', 'Todas as funcionalidades', 'Suporte pelo WhatsApp'],
+    itens: ['1 torneio', '1 categoria com até 12 duplas', 'Todas as funcionalidades', 'Conta criada na hora, sem cartão'],
     botao: 'Começar grátis',
     // Limites aplicados pelo sistema (e conferidos nas regras do banco).
     limites: { torneios: 1, categorias: 1, duplas: 12, dias: 365 },
@@ -34,7 +34,7 @@ export const PLANOS = [
   {
     id: 'temporada', nome: 'Temporada', preco: 399, periodo: 'por ano', destaque: true, nota: 'equivale a R$ 33,25 por mês',
     resumo: 'Para arenas e circuitos com etapas o ano inteiro.',
-    itens: ['Torneios ilimitados por 12 meses', 'Categorias e duplas ilimitadas', 'Identidade visual por etapa', 'Organizadores extras', 'Ajuda na montagem do 1º torneio'],
+    itens: ['Torneios ilimitados por 12 meses', 'Categorias e duplas ilimitadas', 'Ideal para circuitos com ranking', 'Identidade visual por etapa', 'Ajuda na montagem do 1º torneio'],
     botao: 'Quero este plano',
     limites: { torneios: 999, categorias: 99, duplas: 999, dias: 365 },
   },
@@ -47,6 +47,7 @@ export const PLANOS = [
 ];
 
 export const TODOS_INCLUEM = [
-  'Inscrição online com Pix e comprovante', 'Sorteio de chaves e de duplas', 'Placar pelo celular do mesário', 'Classificação e mata-mata automáticos',
-  'Link público ao vivo', 'Modo TV para o telão', 'Patrocinadores com QR code', 'Planilha das inscrições', 'Manual de uso em PDF',
+  'Inscrição online com QR code Pix', 'Lotes, cupons e lista de espera', 'Sorteio de chaves e de duplas', 'Placar pelo celular, mesmo sem internet',
+  'Check-in e fila inteligente', 'Classificação e mata-mata automáticos', 'Link público e "Onde eu jogo?"', 'Telão com chamada e som',
+  'Patrocinadores com QR code', 'Arte do pódio e relatório em PDF', 'Ranking de circuito e galeria de fotos', 'Financeiro e planilhas', 'Manual de uso em PDF',
 ];
