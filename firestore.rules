@@ -10,6 +10,8 @@ rules_version = '2';
 // - Organizadores de um torneio: e-mails em torneios/{id}/organizadores. Editam só aquele torneio.
 // - Mesários: quem abriu o link secreto do torneio. Só alteram placar e andamento dos jogos.
 // - Atletas: podem enviar inscrição. Só os organizadores leem as inscrições (têm telefone).
+// - Clientes (planos): qualquer conta Google cria a própria conta no plano grátis e cria torneios
+//   dentro dos limites do plano (coleção "clientes"). Só administradores mudam planos e limites.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -24,6 +26,48 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/admins/$(request.auth.token.email));
     }
 
+    function emailAtual() {
+      return request.auth.token.email.lower();
+    }
+    function clienteDoc(email) {
+      return /databases/$(database)/documents/clientes/$(email);
+    }
+
+    // Contas de clientes (planos). O cliente cria a própria conta no plano grátis e só pode
+    // aumentar o contador de torneios usados (junto com a criação de um torneio).
+    match /clientes/{email} {
+      allow read: if isAdmin() || (emailOk() && emailAtual() == email);
+      allow create: if isAdmin() || (emailOk() && emailAtual() == email
+        && request.resource.data.keys().hasOnly(['nome', 'zap', 'evento', 'plano', 'torneiosMax', 'categoriasMax', 'duplasMax', 'usados', 'validade', 'criado'])
+        && request.resource.data.plano == 'experimente' && request.resource.data.usados == 0
+        && request.resource.data.torneiosMax == 1 && request.resource.data.categoriasMax == 1 && request.resource.data.duplasMax == 12
+        && request.resource.data.validade is number && request.resource.data.validade <= request.time.toMillis() + 400 * 86400000
+        && request.resource.data.nome is string && request.resource.data.nome.size() <= 80
+        && request.resource.data.zap is string && request.resource.data.zap.size() <= 30
+        && request.resource.data.evento is string && request.resource.data.evento.size() <= 80);
+      allow update: if isAdmin() || (emailOk() && emailAtual() == email && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usados'])
+          && request.resource.data.usados == resource.data.usados + 1 && request.resource.data.usados <= resource.data.torneiosMax)
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'zap', 'evento'])
+          && request.resource.data.nome is string && request.resource.data.nome.size() <= 80
+          && request.resource.data.zap is string && request.resource.data.zap.size() <= 30
+          && request.resource.data.evento is string && request.resource.data.evento.size() <= 80)));
+      allow delete: if isAdmin();
+    }
+
+    // Pedidos de plano com comprovante do Pix. O administrador aprova no painel.
+    match /pedidos/{pid} {
+      allow get: if isAdmin() || (emailOk() && resource.data.email == emailAtual());
+      allow list: if isAdmin() || (emailOk() && resource.data.email == emailAtual());
+      allow create: if emailOk()
+        && request.resource.data.keys().hasOnly(['email', 'plano', 'valor', 'img', 'status', 'em', 'nome'])
+        && request.resource.data.email == emailAtual() && request.resource.data.status == 'pendente'
+        && request.resource.data.plano is string && request.resource.data.plano.size() <= 30
+        && request.resource.data.valor is number
+        && request.resource.data.get('img', '') is string && request.resource.data.get('img', '').size() < 900000;
+      allow update, delete: if isAdmin();
+    }
+
     // Lista de administradores: só se cria pelo Console do Firebase.
     match /admins/{email} {
       allow read: if request.auth != null && request.auth.token.email == email;
@@ -32,8 +76,35 @@ service cloud.firestore {
 
     match /torneios/{tid} {
       allow read: if true;
-      allow create, delete: if isAdmin();
-      allow update: if isOrg();
+      allow create: if isAdmin() || criaComoCliente();
+      allow delete: if isAdmin();
+      allow update: if isOrg() && dentroDoPlano();
+
+      function torneioDoc() {
+        return /databases/$(database)/documents/torneios/$(tid);
+      }
+      // Cliente cria torneio: conta válida, ainda tem torneios no plano e soma 1 ao contador no mesmo envio.
+      function criaComoCliente() {
+        return emailOk() && exists(clienteDoc(emailAtual()))
+          && request.resource.data.dono == emailAtual()
+          && get(clienteDoc(emailAtual())).data.validade > request.time.toMillis()
+          && get(clienteDoc(emailAtual())).data.usados < get(clienteDoc(emailAtual())).data.torneiosMax
+          && getAfter(clienteDoc(emailAtual())).data.usados == get(clienteDoc(emailAtual())).data.usados + 1
+          && request.resource.data.get('categorias', []).size() <= get(clienteDoc(emailAtual())).data.categoriasMax
+          && request.resource.data.get('duplas', []).size() <= get(clienteDoc(emailAtual())).data.duplasMax;
+      }
+      // Torneios de clientes respeitam os limites do plano do dono (categorias, duplas e atletas).
+      function dentroDoPlano() {
+        return isAdmin() || resource.data.get('dono', '') == ''
+          || (request.resource.data.get('dono', '') == resource.data.get('dono', '')
+              && request.resource.data.get('categorias', []).size() <= get(clienteDoc(resource.data.dono)).data.categoriasMax
+              && request.resource.data.get('duplas', []).size() <= get(clienteDoc(resource.data.dono)).data.duplasMax
+              && request.resource.data.get('atletas', []).size() <= get(clienteDoc(resource.data.dono)).data.duplasMax * 2);
+      }
+      // O dono criando o torneio agora (no mesmo envio): pode gravar o link de mesário e se tornar organizador.
+      function criadorNovo() {
+        return emailOk() && !exists(torneioDoc()) && getAfter(torneioDoc()).data.get('dono', '') == emailAtual();
+      }
 
       // Administrador ou organizador deste torneio.
       function isOrg() {
@@ -62,13 +133,14 @@ service cloud.firestore {
       // Guarda o código secreto do link de mesário.
       match /privado/{docId} {
         allow read, write: if isOrg();
+        allow create: if criadorNovo();
       }
 
       // Organizadores deste torneio (ID do documento = e-mail em minúsculas).
       // Cada organizador pode adicionar e remover outros do mesmo torneio.
       match /organizadores/{email} {
         allow read: if isOrg() || (emailOk() && request.auth.token.email.lower() == email);
-        allow create, update: if isOrg()
+        allow create, update: if (isOrg() || (criadorNovo() && email == emailAtual()))
           && email == email.lower()
           && request.resource.data.keys().hasOnly(['nome', 'em', 'por'])
           && request.resource.data.get('nome', '') is string && request.resource.data.get('nome', '').size() <= 60;

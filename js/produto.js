@@ -9,6 +9,8 @@ export const PRODUTO = {
   email: '',
   instagram: '', // sem @
   manual: 'docs/manual-de-uso.pdf',
+  // Pix para receber os planos (aparece com QR code em "Minha conta"). Vazio = a contratação segue pelo WhatsApp.
+  pix: { chave: '', nome: '', cidade: '' },
 };
 
 // preco: número em reais (0 = grátis) ou texto livre ('Sob consulta').
@@ -19,18 +21,22 @@ export const PLANOS = [
     resumo: 'Para conhecer o sistema com um torneio de verdade.',
     itens: ['1 torneio', '1 categoria com até 12 duplas', 'Todas as funcionalidades', 'Suporte pelo WhatsApp'],
     botao: 'Começar grátis',
+    // Limites aplicados pelo sistema (e conferidos nas regras do banco).
+    limites: { torneios: 1, categorias: 1, duplas: 12, dias: 365 },
   },
   {
     id: 'avulso', nome: 'Torneio avulso', preco: 49.9, periodo: 'por torneio',
     resumo: 'Para quem organiza um ou dois torneios por ano.',
     itens: ['1 torneio completo', 'Categorias e duplas ilimitadas', 'Identidade visual do seu evento', 'Organizadores extras', 'O crédito não vence'],
     botao: 'Quero este plano',
+    limites: { torneios: '+1', categorias: 99, duplas: 999, dias: 3650 },
   },
   {
     id: 'temporada', nome: 'Temporada', preco: 399, periodo: 'por ano', destaque: true, nota: 'equivale a R$ 33,25 por mês',
     resumo: 'Para arenas e circuitos com etapas o ano inteiro.',
     itens: ['Torneios ilimitados por 12 meses', 'Categorias e duplas ilimitadas', 'Identidade visual por etapa', 'Organizadores extras', 'Ajuda na montagem do 1º torneio'],
     botao: 'Quero este plano',
+    limites: { torneios: 999, categorias: 99, duplas: 999, dias: 365 },
   },
   {
     id: 'marca', nome: 'Marca própria', preco: 'Sob consulta', periodo: '',

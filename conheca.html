@@ -380,7 +380,7 @@ dialog .aviso{font-size:.78rem;color:var(--muted);margin:0}
         <details><summary>Funciona para duplas sorteadas e torneios mistos?</summary><p>Sim. Os atletas se inscrevem individualmente e o sistema sorteia as duplas, com 2 potes para equilibrar níveis ou formar homem e mulher.</p></details>
         <details><summary>Quais formatos de disputa existem?</summary><p>Grupos com mata-mata, todos contra todos e mata-mata direto, com jogos até 18 (ou a pontuação que você definir), vantagem de 2, teto de pontos, disputa de 3º lugar e final em melhor de 3 sets.</p></details>
         <details><summary>Preciso de internet na arena?</summary><p>Sim. Mesários, telão e organizador precisam de conexão. O 4G do celular é suficiente.</p></details>
-        <details><summary>Como contrato um plano?</summary><p>Clique no plano desejado e envie seus dados. A gente responde pelo WhatsApp com a chave Pix e, após o pagamento, libera o seu acesso como organizador.</p></details>
+        <details><summary>Como contrato um plano?</summary><p>Clique em "Começar grátis", entre com sua conta Google e crie seu primeiro torneio na hora. Para crescer, contrate um plano em "Minha conta": você paga pelo Pix, envia o comprovante e o plano é liberado assim que o pagamento é confirmado.</p></details>
         <details><summary>Tem treinamento?</summary><p>Todo cliente recebe o manual de uso ilustrado em PDF. No plano Temporada ajudamos a montar o primeiro torneio, e no Marca própria treinamos a equipe.</p></details>
       </div>
     </div>
@@ -454,6 +454,7 @@ const dlg = $('#adesao'), sel = $('#ad-plano');
 sel.innerHTML = PLANOS.map(p => `<option value="${esc(p.id)}">${esc(p.nome)}${typeof p.preco === 'number' ? (p.preco ? ' · R$ ' + p.preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + (p.periodo ? ' ' + p.periodo : '') : ' · grátis') : ''}</option>`).join('');
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-plano]'); if (!b) return;
+  if (b.dataset.plano === 'experimente') { location.href = './#conta'; return; } // cadastro grátis direto no sistema
   sel.value = b.dataset.plano; dlg.showModal(); dlg.querySelector('[name=nome]').focus();
 });
 $('#form-adesao').addEventListener('submit', e => {

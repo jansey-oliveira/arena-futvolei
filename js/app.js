@@ -1,10 +1,11 @@
 // Arena Futvôlei — aplicativo (GitHub Pages + Firebase)
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, onAuthStateChanged, signInAnonymously, signInWithPopup, signInWithRedirect, GoogleAuthProvider, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc, getDocs, writeBatch, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, query, where, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc, getDocs, writeBatch, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { firebaseConfig, marcaPadrao } from './config.js';
 import * as L from './logica.js';
 import * as MK from './marca.js';
+import { PRODUTO, PLANOS } from './produto.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -277,11 +278,31 @@ function trocarTorneio(id) {
   assinarTorneio(); verificarMesario(); verificarOrgs();
 }
 async function criarTorneio(d) {
+  if (!S.admin) return criarTorneioCliente(d);
   const id = uid();
   const t = { nome: d.nome || 'Novo torneio', data: d.data || '', local: d.local || '', quadras: (d.quadras || 'Quadra 1, Quadra 2').split(',').map(s => s.trim()).filter(Boolean), duracao: 20, pix: '', pixNome: '', contato: '', inscricoes: true, opcoes: { comprovante: true, desempate: true, patrocinadores: true }, categorias: [], duplas: [], atletas: [], criado: Date.now() };
   S.torneios = [{ id, d: t }, ...S.torneios];
   await lote([['torneios/' + id, t], [`torneios/${id}/privado/config`, { mesarioToken: token() }]]);
   trocarTorneio(id); S.tab = 'categorias'; render();
+}
+/** Cliente (plano) cria o próprio torneio: vira organizador e consome um torneio do plano, tudo num envio só. */
+async function criarTorneioCliente(d) {
+  const em = meuEmail(), cl = S.cliente; if (!em || !cl) return toast('Crie sua conta antes de criar um torneio.');
+  if (cl.usados >= cl.torneiosMax || cl.validade < Date.now()) return toast('Seu plano não permite novos torneios. Veja os planos em Minha conta.');
+  const id = uid();
+  const t = { nome: d.nome || 'Novo torneio', data: d.data || '', local: d.local || '', quadras: (d.quadras || 'Quadra 1, Quadra 2').split(',').map(s => s.trim()).filter(Boolean), duracao: 20, pix: '', pixNome: '', contato: cl.zap || '', inscricoes: false, opcoes: { comprovante: true, desempate: true, patrocinadores: true }, categorias: [], duplas: [], atletas: [], criado: Date.now(), dono: em, limites: { categorias: cl.categoriasMax, duplas: cl.duplasMax } };
+  const novo = { ...cl, usados: cl.usados + 1 };
+  await lote([['torneios/' + id, t], [`torneios/${id}/privado/config`, { mesarioToken: token() }], [`torneios/${id}/organizadores/${em}`, { nome: cl.nome || '', em: Date.now(), por: em }], ['clientes/' + em, novo]]);
+  S.cliente = novo; S.orgDe[id] = true; if (!S.torneios.some(x => x.id === id)) S.torneios = [{ id, d: t }, ...S.torneios];
+  trocarTorneio(id); S.tab = 'categorias'; render(); toast('Torneio criado! Agora monte as categorias.');
+}
+/** Limites do plano do dono do torneio (undefined para torneios do administrador). */
+const limites = () => (T()?.dono && !S.admin ? T().limites : null);
+function cabeNoPlano(tipo, extra = 1) {
+  const l = limites(); if (!l) return true;
+  const atual = tipo === 'categorias' ? cats().length : duplas().length, max = l[tipo];
+  if (atual + extra <= max) return true;
+  toast(`O plano deste torneio permite até ${max} ${tipo === 'categorias' ? (max === 1 ? 'categoria' : 'categorias') : 'duplas'}. Veja os planos em Minha conta.`); return false;
 }
 const esperar = async (fn, ms = 8000) => { const t0 = Date.now(); while (!fn() && Date.now() - t0 < ms) await new Promise(r => setTimeout(r, 150)); };
 async function criarExemplo() {
@@ -330,6 +351,7 @@ const vagasCat = c => {
 };
 async function decidirInsc(id, status) {
   const it = S.insc.find(i => i.id === id); if (!it) return;
+  if (status === 'aprovada' && !sorteadas(catById(it.cat)) && !cabeNoPlano('duplas')) return;
   if (status === 'aprovada') {
     if (sorteadas(catById(it.cat))) await saveT({ atletas: [...atletas(), ...[it.j1, it.j2].filter(Boolean).map(nome => ({ id: uid(), cat: it.cat, nome, pote: 1 }))] });
     else await saveT({ duplas: [...duplas(), { id: uid(), cat: it.cat, j1: it.j1, j2: it.j2, apelido: it.nomeDupla || '', cabeca: false, chave: null }] });
@@ -387,6 +409,8 @@ async function verificarAdmin(u) {
   const em = meuEmail();
   if (em) { try { S.admin = (await getDoc(R('admins/' + em))).exists(); } catch { S.admin = false; } }
   S.org = podeOrganizar(S.tid);
+  S.cliente = null;
+  if (em && !S.admin) { try { const c = await getDoc(R('clientes/' + em)); S.cliente = c.exists() ? c.data() : null; } catch { } }
   if (em && !S.admin) await verificarOrgs();
   else aposLogin();
 }
@@ -450,7 +474,7 @@ function renderChrome() {
   $('#topbar').innerHTML = `<div class="brand">${logoHTML(m, '38px', 'var(--accent-board)')}<div class="nm"><b>${esc(m.nome)}</b>${m.sub ? `<span>${esc(m.sub)}</span>` : ''}</div></div>
     ${S.torneios.length ? `<select id="selT" aria-label="Torneio">${S.torneios.map(x => `<option value="${x.id}"${x.id === S.tid ? ' selected' : ''}>${esc(x.d.nome)}${x.d.data ? ' · ' + dataBR(x.d.data) : ''}</option>`).join('')}</select>` : '<span style="flex:1"></span>'}
     <span class="role">${S.admin ? 'Administrador' : S.org ? 'Organizador' : S.mesario ? 'Mesário' : 'Público'}</span>
-    ${configurado ? `<div class="auth">${logado ? `<button data-act="sair" title="${esc(S.user.email || '')}">Sair</button>` : `<button data-act="entrar">Organizador</button>`}</div>` : ''}`;
+    ${configurado ? `<div class="auth">${logado ? `${S.admin ? '<button data-act="tab" data-k="admin">Admin</button>' : '<button data-act="tab" data-k="conta">Minha conta</button>'}<button data-act="sair" title="${esc(S.user.email || '')}">Sair</button>` : `<button data-act="entrar">Organizador</button>`}</div>` : ''}`;
   $('#rodape').innerHTML = `<div class="rodape"><span>${esc(T()?.nome || m.nome)}${m.sub ? ' · ' + esc(m.sub) : ''}</span>${m.lema ? `<span>${esc(m.lema)}</span>` : ''}<a href="conheca.html">Conheça o sistema e os planos</a></div>`;
   $('#tabs').innerHTML = T() ? tabsList().map(([k, l]) => `<button data-act="tab" data-k="${k}" aria-current="${S.tab === k}">${l}</button>`).join('') : '';
 }
@@ -464,6 +488,8 @@ function viewHTML() {
   if (!configurado) return setupHTML();
   if (S.boot === 'carregando') return `<div class="empty">${logoHTML(marca(), '120px')}<p class="muted">Carregando torneios…</p></div>`;
   if (S.boot === 'erro') return `<div class="empty">${logoHTML(marca(), '120px')}<h2>Não foi possível carregar os torneios</h2><p class="muted">Confira a internet. Se você acabou de instalar o site, verifique se o banco Firestore foi criado e se as regras foram publicadas (passos 2 e 4 do guia).</p></div>`;
+  if (S.tab === 'conta') return contaV();
+  if (S.tab === 'admin' && S.admin) return adminV();
   if (!S.torneios.length) return emptyHTML();
   if (!T()) return '';
   const aba = ['config', 'marca', 'categorias', 'duplas'].includes(S.tab) && !S.org ? 'painel' : S.tab;
@@ -476,6 +502,7 @@ function setupHTML() {
   <p class="small muted" style="margin:0">O passo a passo completo está no arquivo README.md do repositório.</p></div>`;
 }
 function emptyHTML() {
+  if (!S.admin && S.user && !S.user.isAnonymous) return contaV();
   if (!S.admin) return `<div class="empty">${logoHTML(marca(), '160px')}<h2>Nenhum torneio publicado ainda</h2><p class="muted">Quando o organizador criar um torneio, as chaves, os jogos e os placares aparecem aqui ao vivo.</p>
     ${S.user && !S.user.isAnonymous ? `<p class="small muted">Você entrou como ${esc(S.user.email)}. Só administradores criam torneios. Quando um torneio adicionar você como organizador, ele aparece aqui.</p>` : ''}</div>`;
   return `<div class="empty">${logoHTML(marca(), '160px')}<h2>Monte seu primeiro torneio</h2>
@@ -515,6 +542,113 @@ const gameRow = (j, opts = {}) => {
    ${opts.fila ? filaCtl(j, ...opts.fila) : ''}<div class="meta">${st}<span class="cat-tag" style="${estCat(c)}">${esc(c?.nome || '')}</span><span>${esc(fase || '')}</span>${detSets}${S.org && opts.edit && S.editJogo !== j.id && j.a && j.b ? `<button class="link small" data-act="editJogo" data-id="${j.id}">Editar placar ou W.O.</button>` : ''}</div>${edit}</div>`;
 };
 const podioHTML = pd => `<div class="podium">${[0, 1, 2].map(i => `<div class="p p${i + 1}"><b>${i + 1}º</b>${esc(pd[i] ? dn(pd[i]) : '—')}${i === 2 && pd[3] ? '<br>' + esc(dn(pd[3])) : ''}</div>`).join('')}</div>`;
+
+/* ---------- conta do cliente (planos) ---------- */
+const planoDe = id => PLANOS.find(p => p.id === id);
+const dataCurta = ts => ts ? new Date(ts).toLocaleDateString('pt-BR') : '—';
+const zapVendas = txt => PRODUTO.whatsapp ? `https://wa.me/${String(PRODUTO.whatsapp).replace(/\D/g, '')}?text=${encodeURIComponent(txt)}` : '';
+let pedidosLidos = '';
+function carregarMeusPedidos() {
+  const em = meuEmail(); if (!em || pedidosLidos === em) return; pedidosLidos = em;
+  getDocs(query(C('pedidos'), where('email', '==', em))).then(q => { S.meusPedidos = q.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.em - a.em); render(); }).catch(() => { });
+}
+function contaV() {
+  const logado = S.user && !S.user.isAnonymous;
+  if (!logado) return `<div class="empty">${logoHTML(marca(), '120px')}<h2>Organize seu torneio</h2><p class="muted">Entre com sua conta Google para criar sua conta grátis e montar o primeiro torneio em minutos.</p><div class="row" style="justify-content:center"><button class="btn" data-act="entrar">Entrar com Google</button><a class="btn ghost" href="conheca.html#planos">Ver planos</a></div></div>`;
+  if (S.admin) return `<div class="panel">Você é administrador. Os clientes e pedidos ficam na aba <button class="link" data-act="tab" data-k="admin">Admin</button>.</div>`;
+  const g = planoDe('experimente'), cl = S.cliente;
+  if (!cl) return `<div class="stack" style="max-width:720px;margin:0 auto;width:100%"><div><div class="eyebrow">Bem-vindo</div><h2>Crie sua conta grátis</h2><p class="muted">No plano ${esc(g?.nome || 'grátis')} você monta ${g?.limites.torneios} torneio com ${g?.limites.categorias} categoria e até ${g?.limites.duplas} duplas, com todas as funcionalidades. Depois é só contratar um plano para crescer.</p></div>
+    <form class="panel form" data-form="cadastro"><label class="field"><span>Seu nome</span><input id="cd-n" name="nome" required maxlength="80" autocomplete="name"></label>
+      <label class="field"><span>WhatsApp</span><input id="cd-z" name="zap" type="tel" required maxlength="30" placeholder="(11) 90000-0000"></label>
+      <label class="field full"><span>Nome do seu evento ou arena</span><input id="cd-e" name="evento" required maxlength="80"></label>
+      <p class="small muted full" style="margin:0">Conta Google: <b>${esc(S.user.email)}</b></p>
+      <div class="full"><button class="btn">Criar conta grátis</button></div></form></div>`;
+  carregarMeusPedidos();
+  const pl = planoDe(cl.plano), vencido = cl.validade < Date.now(), podeCriar = !vencido && cl.usados < cl.torneiosMax;
+  const lim = n => n >= 999 ? 'ilimitados' : n >= 99 ? 'ilimitadas' : n;
+  const pend = (S.meusPedidos || []).filter(p => p.status === 'pendente');
+  return `<div class="stack"><div class="sect-head"><div><div class="eyebrow">Minha conta</div><h2>${esc(cl.nome || S.user.email)}</h2><p class="muted small" style="margin:0">${esc(cl.evento || '')} · ${esc(S.user.email)}</p></div></div>
+    <section class="panel stats"><div class="stat"><b>${esc(pl?.nome || cl.plano)}</b><span class="label">plano</span></div><div class="stat"><b class="num">${cl.usados}/${lim(cl.torneiosMax)}</b><span class="label">torneios usados</span></div><div class="stat"><b class="num">${lim(cl.categoriasMax)}</b><span class="label">categorias por torneio</span></div><div class="stat"><b class="num">${lim(cl.duplasMax)}</b><span class="label">duplas por torneio</span></div><div class="stat"><b class="num">${dataCurta(cl.validade)}</b><span class="label">${vencido ? 'plano vencido' : 'válido até'}</span></div></section>
+    ${podeCriar ? `<section class="stack" style="gap:10px"><h3>Criar torneio</h3>${novoTForm()}</section>` : `<p class="dica" style="margin:0">${vencido ? 'Seu plano venceu.' : 'Você já usou todos os torneios do plano.'} Contrate um plano abaixo para criar mais.</p>`}
+    ${meusTorneios().length ? `<section class="stack" style="gap:10px"><h3>Meus torneios</h3><div class="agenda">${meusTorneios().map(x => `<article class="ag-card" style="--ag:var(--accent)"><div class="ag-data">${partesData(x.d.data) ? `<b class="num">${partesData(x.d.data).dm}</b>` : '<span>sem data</span>'}</div><div><h3>${esc(x.d.nome)}</h3><p class="small muted" style="margin:2px 0 8px">${(x.d.categorias || []).length} categorias · ${(x.d.duplas || []).length} duplas</p><button class="btn sm" data-act="irTorneio" data-id="${x.id}" data-k="config">Abrir</button></div></article>`).join('')}</div></section>` : ''}
+    <section class="stack" style="gap:10px"><h3>Planos</h3>${pend.length ? `<p class="dica" style="margin:0">Pedido do plano ${esc(planoDe(pend[0].plano)?.nome || pend[0].plano)} enviado em ${dataCurta(pend[0].em)}: aguardando confirmação do pagamento.</p>` : ''}
+      <div class="planos-app">${PLANOS.filter(p => p.id !== 'experimente').map(p => `<article class="panel stack" style="gap:8px"><h3>${esc(p.nome)}</h3><b class="num">${typeof p.preco === 'number' ? brl(p.preco) + (p.periodo ? ` <span class="small muted">${esc(p.periodo)}</span>` : '') : esc(p.preco)}</b><p class="small muted" style="margin:0">${esc(p.resumo)}</p><ul class="small" style="margin:0;padding-left:18px">${p.itens.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+        ${typeof p.preco === 'number' && p.limites ? `<button class="btn sm" data-act="pedirPlano" data-id="${p.id}">Contratar</button>` : zapVendas(`Olá! Tenho interesse no plano ${p.nome}. Minha conta: ${S.user.email}`) ? `<a class="btn ghost sm" href="${zapVendas(`Olá! Tenho interesse no plano ${p.nome}. Minha conta: ${S.user.email}`)}" target="_blank" rel="noopener">Falar no WhatsApp</a>` : ''}</article>`).join('')}</div>
+      ${S.pedPlano ? pedidoHTML(planoDe(S.pedPlano)) : ''}</section></div>`;
+}
+function pedidoHTML(p) {
+  if (!p) return '';
+  const cod = PRODUTO.pix?.chave ? L.pixPayload({ chave: PRODUTO.pix.chave, nome: PRODUTO.pix.nome || PRODUTO.nome, cidade: PRODUTO.pix.cidade || 'BRASIL', valor: p.preco, txid: 'PLANO' + p.id.toUpperCase().slice(0, 10) }) : '';
+  let img = ''; if (cod) { try { const q = window.qrcode(0, 'M'); q.addData(cod); q.make(); img = `<img class="qr" src="${q.createDataURL(5, 2)}" alt="QR code Pix do plano">`; } catch { } }
+  const wa = zapVendas(`Olá! Quero contratar o plano ${p.nome} (${brl(p.preco)}). Minha conta: ${S.user.email}`);
+  return `<form class="panel stack" data-form="pedido" data-plano="${p.id}" style="gap:12px"><h3>Contratar ${esc(p.nome)} · ${brl(p.preco)}</h3>
+    ${cod ? `<div class="pixqr">${img}<div class="stack" style="gap:8px;min-width:0"><b>Pague ${brl(p.preco)} pelo Pix</b><span class="small muted">Depois envie o comprovante abaixo. O plano é liberado assim que o pagamento for confirmado.</span><button type="button" class="btn sm" data-act="copiarCod" data-cod="${esc(cod)}">Copiar Pix copia e cola</button></div></div>
+      <label class="field"><span>Comprovante do Pix</span><input id="pd-f" name="foto" type="file" accept="image/*" required></label>
+      <div class="row"><button class="btn">Enviar comprovante</button><button type="button" class="btn ghost" data-act="pedirPlano" data-id="">Cancelar</button></div>`
+      : `<p style="margin:0">Fale com a gente pelo WhatsApp para receber os dados de pagamento. O plano é liberado na sua conta assim que o pagamento for confirmado.</p><div class="row">${wa ? `<a class="btn" href="${wa}" target="_blank" rel="noopener">Falar no WhatsApp</a>` : ''}<button type="button" class="btn ghost" data-act="pedirPlano" data-id="">Cancelar</button></div>`}
+  </form>`;
+}
+
+/* ---------- painel do administrador ---------- */
+function assinarAdmin() {
+  if (unsubsAdmin.cl || !db) return;
+  unsubsAdmin.cl = onSnapshot(C('clientes'), q => { S.clientes = q.docs.map(d => ({ email: d.id, ...d.data() })).sort((a, b) => (b.criado || 0) - (a.criado || 0)); render(); }, () => { S.clientes = []; });
+  unsubsAdmin.pd = onSnapshot(C('pedidos'), q => { S.pedidos = q.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.em - a.em); render(); }, () => { S.pedidos = []; });
+}
+const unsubsAdmin = {};
+function adminV() {
+  assinarAdmin();
+  const cls = S.clientes || [], pend = (S.pedidos || []).filter(p => p.status === 'pendente');
+  const lim = n => n >= 999 ? '∞' : n;
+  return `<div class="stack"><div class="sect-head"><div><div class="eyebrow">Administrador</div><h2>Painel do sistema</h2></div><a class="btn ghost sm" href="https://console.firebase.google.com/project/${esc(firebaseConfig.projectId)}/usage" target="_blank" rel="noopener">Uso do Firebase</a></div>
+    <section class="panel stats"><div class="stat"><b class="num">${cls.length}</b><span class="label">clientes</span></div><div class="stat"><b class="num">${S.torneios.length}</b><span class="label">torneios</span></div><div class="stat"><b class="num">${pend.length}</b><span class="label">pedidos pendentes</span></div><div class="stat"><b class="num">${brl((S.pedidos || []).filter(p => p.status === 'aprovado').reduce((s, p) => s + (+p.valor || 0), 0))}</b><span class="label">planos aprovados</span></div></section>
+    <section class="panel stack" style="gap:10px"><h3>Pedidos de plano</h3>${pend.length ? pend.map(p => `<div class="espera"><span><b>${esc(planoDe(p.plano)?.nome || p.plano)}</b> · ${brl(p.valor)} · ${esc(p.nome || '')} &lt;${esc(p.email)}&gt; <span class="small muted">· ${dataCurta(p.em)}</span></span><span class="row" style="gap:8px">${p.img ? `<button class="btn ghost sm" data-act="verPedido" data-id="${p.id}">Comprovante</button>` : ''}<button class="btn sm" data-act="aprovarPedido" data-id="${p.id}">Aprovar e liberar</button><button class="link small" data-act="recusarPedido" data-id="${p.id}">Recusar</button></span></div>`).join('') : '<p class="muted" style="margin:0">Nenhum pedido pendente.</p>'}</section>
+    <section class="panel stack" style="gap:10px"><h3>Clientes</h3>${cls.length ? `<div class="tw"><table><thead><tr><th>Cliente</th><th>Plano</th><th class="n">Torneios</th><th class="n">Categ.</th><th class="n">Duplas</th><th>Validade</th><th></th></tr></thead><tbody>
+      ${cls.map(c => S.editCli === c.email ? `<tr><td colspan="7"><form class="form" data-form="cliente" data-id="${esc(c.email)}">
+          <label class="field"><span>Plano</span><select name="plano">${PLANOS.map(p => `<option value="${p.id}"${p.id === c.plano ? ' selected' : ''}>${esc(p.nome)}</option>`).join('')}</select></label>
+          <label class="field"><span>Torneios (máx.)</span><input name="torneiosMax" type="number" min="0" value="${c.torneiosMax}"></label>
+          <label class="field"><span>Categorias por torneio</span><input name="categoriasMax" type="number" min="1" value="${c.categoriasMax}"></label>
+          <label class="field"><span>Duplas por torneio</span><input name="duplasMax" type="number" min="2" value="${c.duplasMax}"></label>
+          <label class="field"><span>Válido até</span><input name="validade" type="date" value="${c.validade ? new Date(c.validade).toISOString().slice(0, 10) : ''}"></label>
+          <div class="row full"><button class="btn sm">Salvar</button><button type="button" class="link small" data-act="editCli" data-id="">Cancelar</button></div></form></td></tr>`
+        : `<tr><td><b>${esc(c.nome || '')}</b><div class="small muted">${esc(c.email)}${c.zap ? ` · <a class="link" href="https://wa.me/${String(c.zap).replace(/\D/g, '').replace(/^(?!55)/, '55')}" target="_blank" rel="noopener">${esc(c.zap)}</a>` : ''}</div><div class="small muted">${esc(c.evento || '')}</div></td><td>${esc(planoDe(c.plano)?.nome || c.plano)}</td><td class="n">${c.usados}/${lim(c.torneiosMax)}</td><td class="n">${lim(c.categoriasMax)}</td><td class="n">${lim(c.duplasMax)}</td><td class="${c.validade < Date.now() ? 'muted' : ''}">${dataCurta(c.validade)}</td><td class="n"><button class="link small" data-act="editCli" data-id="${esc(c.email)}">Editar</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted" style="margin:0">Nenhum cliente cadastrado ainda. Eles se cadastram pela página de planos (botão Começar grátis).</p>'}</section>
+    <section class="panel stack" style="gap:10px"><h3>Torneios</h3><div class="tw"><table><thead><tr><th>Torneio</th><th>Dono</th><th>Data</th><th class="n">Categ.</th><th class="n">Duplas</th><th></th></tr></thead><tbody>
+      ${S.torneios.map(x => `<tr><td>${esc(x.d.nome)}${x.d.exemplo ? ' <span class="chip">exemplo</span>' : ''}</td><td class="small">${esc(x.d.dono || 'administração')}</td><td>${dataBR(x.d.data) || '—'}</td><td class="n">${(x.d.categorias || []).length}</td><td class="n">${(x.d.duplas || []).length}</td><td class="n nowrap"><button class="link small" data-act="irTorneio" data-id="${x.id}">Abrir</button> <button class="link small" data-act="backup" data-id="${x.id}">Backup</button></td></tr>`).join('')}</tbody></table></div></section>
+    <section class="panel form"><h3 class="full">Restaurar backup</h3><label class="field full"><span>Arquivo de backup (.json)</span><input id="bk-arq" type="file" accept="application/json,.json" data-change="restaurar"></label><p class="small muted full" style="margin:0">Cria um torneio novo com os dados do arquivo (o original não é alterado). Comprovantes e fotos em tamanho grande não vão no backup.</p></section>
+  </div>`;
+}
+async function aprovarPedido(p) {
+  const pl = planoDe(p.plano), c = (S.clientes || []).find(x => x.email === p.email); if (!pl?.limites || !c) return toast('Cliente ou plano não encontrado.');
+  const l = pl.limites, agora = Date.now(), dia = 86400000;
+  const novo = { ...c, plano: pl.id,
+    torneiosMax: l.torneios === '+1' ? Math.max(c.torneiosMax, c.usados) + 1 : Math.max(+l.torneios, c.torneiosMax),
+    categoriasMax: Math.max(l.categorias, c.categoriasMax), duplasMax: Math.max(l.duplas, c.duplasMax),
+    // Plano pago conta a partir de hoje (o prazo do plano grátis não soma); renovação antecipada soma ao prazo atual.
+    validade: l.torneios === '+1' ? Math.max(c.validade || 0, agora + l.dias * dia) : Math.max(c.plano === 'experimente' ? 0 : c.validade || 0, agora) + l.dias * dia };
+  delete novo.email;
+  await lote([['clientes/' + p.email, novo], ...S.torneios.filter(x => x.d.dono === p.email).map(x => [`torneios/${x.id}`, { ...x.d, limites: { categorias: novo.categoriasMax, duplas: novo.duplasMax } }])]);
+  await updD('pedidos/' + p.id, { status: 'aprovado' });
+  toast(`Plano ${pl.nome} liberado para ${p.email}.`);
+}
+
+/* ---------- backup do torneio ---------- */
+async function exportarBackup(tid) {
+  const x = S.torneios.find(t => t.id === tid); if (!x) return;
+  const sub = async n => (await getDocs(C(`torneios/${tid}/${n}`)).catch(() => null))?.docs.map(d => ({ id: d.id, ...d.data() })) || [];
+  const dados = { formato: 'arena-futvolei-backup', versao: 1, exportado: new Date().toISOString(), id: tid, torneio: x.d,
+    jogos: await sub('jogos'), patrocinadores: await sub('patrocinadores'), organizadores: await sub('organizadores'), inscricoes: await sub('inscricoes'), fotos: await sub('fotos') };
+  baixarArquivo(JSON.stringify(dados), `backup-${slug(x.d.nome)}-${hojeISO()}.json`, 'application/json');
+  toast('Backup baixado.');
+}
+async function importarBackup(file) {
+  let b; try { b = JSON.parse(await file.text()); } catch { return toast('Arquivo inválido.'); }
+  if (b.formato !== 'arena-futvolei-backup' || !b.torneio) return toast('Este arquivo não é um backup do sistema.');
+  const id = uid(), t = { ...b.torneio, nome: `${b.torneio.nome} (restaurado)`, criado: Date.now() };
+  const ops = [['torneios/' + id, t], [`torneios/${id}/privado/config`, { mesarioToken: token() }]];
+  for (const n of ['jogos', 'patrocinadores', 'organizadores', 'inscricoes', 'fotos']) (b[n] || []).forEach(({ id: did, ...d }) => ops.push([`torneios/${id}/${n}/${did}`, d]));
+  await lote(ops); if (!S.torneios.some(x => x.id === id)) S.torneios = [{ id, d: t }, ...S.torneios];
+  toast(`Torneio restaurado com ${(b.jogos || []).length} jogos.`); trocarTorneio(id); S.tab = 'painel'; render();
+}
 
 /* ---------- pódio: arte, ranking ---------- */
 function acoesPodio(c) {
@@ -762,7 +896,7 @@ function patsFaixa() {
 
 function config() {
   const t = T();
-  return `<div class="stack"><div class="sect-head"><h2>Dados do torneio</h2>${S.admin ? '<div class="row"><button class="btn ghost sm" data-act="duplicarT">Duplicar torneio</button><button class="btn danger sm" data-act="apagarT">Apagar torneio</button></div>' : ''}</div>
+  return `<div class="stack"><div class="sect-head"><h2>Dados do torneio</h2><div class="row"><button class="btn ghost sm" data-act="backup">Baixar backup</button>${S.admin ? '<button class="btn ghost sm" data-act="duplicarT">Duplicar torneio</button><button class="btn danger sm" data-act="apagarT">Apagar torneio</button>' : ''}</div></div>
   <form class="panel form" data-form="config">
     <label class="field full"><span>Nome</span><input id="c-nome" name="nome" type="text" value="${esc(t.nome)}" required></label>
     <label class="field"><span>Data</span><input id="c-data" name="data" type="date" value="${esc(t.data)}"></label>
@@ -1443,7 +1577,7 @@ const ACT = {
   novoT: () => { S.novoT = true; render(); }, novoT2: () => { S.novoT = !S.novoT; render(); }, cancelNovo: () => { S.novoT = false; render(); },
   exemplo: () => criarExemplo().catch(erro),
   apagarT: () => confirmar('Apagar este torneio, com todas as categorias, duplas, jogos e inscrições? Isso não pode ser desfeito.', 'Apagar torneio', () => apagarTorneio().catch(erro)),
-  addCat: async () => { const c = novaCat(); await saveT({ categorias: [...cats(), c] }); S.editCat = c.id; render(); },
+  addCat: async () => { if (!cabeNoPlano('categorias')) return; const c = novaCat(); await saveT({ categorias: [...cats(), c] }); S.editCat = c.id; render(); },
   editCat: d => { S.editCat = d.id || null; render(); },
   delCat: d => confirmar('Remover esta categoria, suas duplas e seus jogos?', 'Remover', async () => { await lote(apagarJogosOps(d.id)); await saveT({ categorias: cats().filter(c => c.id !== d.id), duplas: duplas().filter(x => x.cat !== d.id), atletas: atletas().filter(x => x.cat !== d.id) }); render(); }),
   delAtleta: d => { saveT({ atletas: atletas().filter(a => a.id !== d.id) }); render(); },
@@ -1462,6 +1596,12 @@ const ACT = {
     confirmar(`Registrar W.O.: ${dn(d.aus)} não compareceu e ${dn(venc)} vence.`, 'Registrar W.O.', () => { S.editJogo = null; woJogo(j, d.aus).then(() => toast('W.O. registrado.')).catch(erro); }); },
   liberarCat: d => confirmar(`Liberar os jogos de ${catById(d.id)?.nome || 'categoria'} antes do horário? Eles entram na fila agora.`, 'Liberar agora', () => saveT({ categorias: cats().map(c => c.id === d.id ? { ...c, liberada: true } : c) }).then(() => { render(); toast('Categoria liberada.'); })),
   duplicarT: () => confirmar('Criar uma cópia deste torneio para a próxima etapa? Vão juntos: categorias, regras, identidade visual, página de inscrição, patrocinadores e organizadores. Duplas, jogos e inscrições não são copiados.', 'Duplicar torneio', () => duplicarTorneio().catch(erro)),
+  pedirPlano: d => { S.pedPlano = d.id || null; render(); },
+  editCli: d => { S.editCli = d.id || null; render(); },
+  aprovarPedido: d => { const p = (S.pedidos || []).find(x => x.id === d.id); if (p) confirmar(`Liberar o plano ${planoDe(p.plano)?.nome || p.plano} para ${p.email}? Confira antes se o pagamento de ${brl(p.valor)} caiu.`, 'Aprovar e liberar', () => aprovarPedido(p).catch(erro)); },
+  recusarPedido: d => confirmar('Recusar este pedido?', 'Recusar', () => updD('pedidos/' + d.id, { status: 'recusado' })),
+  verPedido: d => { const p = (S.pedidos || []).find(x => x.id === d.id); if (p?.img) { S.foto = p.img; renderModal(); } },
+  backup: d => exportarBackup(d.id || S.tid).catch(erro),
   arte: async d => { const c = catById(d.id); toast('Gerando a arte…'); const src = await artePodio(c).catch(e => { console.error(e); return null; }); if (!src) return toast('Não foi possível gerar a arte.'); S.arte = { src, nome: `podio-${slug(T().nome)}-${slug(c.nome)}.png` }; renderModal(); },
   baixarArte: () => S.arte && baixarArquivo(S.arte.src, S.arte.nome),
   fecharArte: () => { S.arte = null; renderModal(); },
@@ -1582,6 +1722,7 @@ document.addEventListener('change', e => {
   if (el.dataset.change === 'cat') { S.cat = el.value; el.blur(); render(); }
   if (el.dataset.change === 'pote') { saveT({ atletas: atletas().map(a => a.id === el.dataset.id ? { ...a, pote: +el.value } : a) }); el.blur(); render(); return; }
   if (el.dataset.change === 'inscCat') { ajustarFormInsc(el.value); return; }
+  if (el.dataset.change === 'restaurar') { const f = el.files?.[0]; if (f) confirmar(`Restaurar o backup "${f.name}" como um torneio novo?`, 'Restaurar', () => importarBackup(f).catch(erro)); el.value = ''; return; }
   if (el.dataset.change === 'rkCat') { S.rkCat = el.value; el.blur(); render(); return; }
   if (el.dataset.change === 'fotoCat') { S.fotoCat = el.value; el.blur(); render(); return; }
   if (el.dataset.change === 'presente') { saveT({ duplas: duplas().map(d => d.id === el.dataset.id ? { ...d, presente: el.checked } : d) }); return; }
@@ -1589,14 +1730,14 @@ document.addEventListener('change', e => {
 });
 const num = (v, d, min) => Math.max(min, Number.isFinite(+v) && v !== '' ? +v : d);
 const FORM = {
-  novoT: fd => { S.novoT = false; criarTorneio(Object.fromEntries(fd)).catch(() => { }); },
+  novoT: fd => { S.novoT = false; criarTorneio(Object.fromEntries(fd)).catch(erro); },
   config: fd => { const o = Object.fromEntries(fd); saveT({ nome: o.nome, data: o.data, local: o.local, quadras: o.quadras.split(',').map(s => s.trim()).filter(Boolean), duracao: num(o.duracao, 20, 5), descanso: num(o.descanso, 0, 0), contato: o.contato, pix: o.pix, pixNome: o.pixNome, pixCidade: String(o.pixCidade || '').trim(), circuito: String(o.circuito || '').trim(), pontosRanking: L.pontosTxt(L.lerPontos(o.pontosRanking)), album: String(o.album || '').trim(), inscricoes: fd.has('inscricoes'), opcoes: { comprovante: fd.has('op_comprovante'), desempate: fd.has('op_desempate'), patrocinadores: fd.has('op_patrocinadores'), checkin: fd.has('op_checkin') } }).then(() => toast('Torneio salvo.')); },
   cat: (fd, f) => {
     const o = Object.fromEntries(fd); const id = f.dataset.id;
     const up = { nome: o.nome, formato: o.formato, chaves: num(o.chaves, 1, 1), classificam: num(o.classificam, 1, 1), extras: num(o.extras, 0, 0), pontos: num(o.pontos, 18, 1), teto: num(o.teto, 0, 0), vagas: num(o.vagas, 2, 2), valor: num(o.valor, 0, 0), cobranca: o.cobranca, vantagem: fd.has('vantagem'), terceiro: fd.has('terceiro'), quadras: fd.getAll('q'), modoDuplas: o.modoDuplas === 'sorteadas' ? 'sorteadas' : 'fixas', potes: fd.has('potes'), finalSets: fd.has('finalSets'), pontosSet: num(o.pontosSet, 18, 1), pontosTie: num(o.pontosTie, 15, 1), cor: o.cor === 'outra' ? MK.normHex(o.corOutra, '') : MK.normHex(o.cor, ''), dia: String(o.dia || ''), hora: String(o.hora || ''), regra: String(o.regra || '').trim().slice(0, 1500), lotes: L.lerLotes(o.lotes).slice(0, 6) };
     S.editCat = null; saveT({ categorias: cats().map(c => c.id === id ? { ...c, ...up, liberada: c.dia === up.dia && c.hora === up.hora ? !!c.liberada : false } : c) }).then(() => toast('Categoria salva.'));
   },
-  addDupla: (fd, f) => { const o = Object.fromEntries(fd); saveT({ duplas: [...duplas(), { id: uid(), cat: S.cat, j1: o.j1.trim(), j2: o.j2.trim(), cabeca: fd.has('cabeca'), chave: null }] }); f.reset(); },
+  addDupla: (fd, f) => { if (!cabeNoPlano('duplas')) return; const o = Object.fromEntries(fd); saveT({ duplas: [...duplas(), { id: uid(), cat: S.cat, j1: o.j1.trim(), j2: o.j2.trim(), cabeca: fd.has('cabeca'), chave: null }] }); f.reset(); },
   colar: (fd, f) => {
     const novas = L.lerLista(fd.get('lista')).map(([a, b]) => ({ id: uid(), cat: S.cat, j1: a, j2: b, cabeca: false, chave: null }));
     if (!novas.length) return toast('Nenhuma dupla reconhecida. Use o formato Atleta / Atleta.');
@@ -1633,6 +1774,23 @@ const FORM = {
     if (pa === pb) return toast('O jogo não pode terminar empatado.');
     if (!L.fimValido(c, pa, pb) && !fd.has('forcar')) return toast(`Placar fora da regra (${regraTxt(c)}). Marque "aceitar fora da regra" para salvar mesmo assim.`);
     S.editJogo = null; finalizar(j, pa, pb).then(() => toast('Resultado salvo. Classificação recalculada.'));
+  },
+  cadastro: async fd => {
+    const em = meuEmail(); if (!em) return; const cut = (v, n) => String(v || '').trim().slice(0, n), g = planoDe('experimente').limites;
+    const c = { nome: cut(fd.get('nome'), 80), zap: cut(fd.get('zap'), 30), evento: cut(fd.get('evento'), 80), plano: 'experimente', torneiosMax: g.torneios, categoriasMax: g.categorias, duplasMax: g.duplas, usados: 0, validade: Date.now() + g.dias * 86400000, criado: Date.now() };
+    try { await setDoc(R('clientes/' + em), c); S.cliente = c; render(); toast('Conta criada! Agora crie seu primeiro torneio.'); } catch (e) { erro(e); }
+  },
+  pedido: async (fd, f) => {
+    const p = planoDe(f.dataset.plano), file = fd.get('foto'); if (!p || !file?.size) return;
+    let img = ''; try { img = await comprimirImagem(file, 1400, 700000); } catch { return toast('Não consegui abrir a imagem do comprovante.'); }
+    try { await setDoc(R('pedidos/' + uid()), { email: meuEmail(), nome: S.cliente?.nome || '', plano: p.id, valor: +p.preco, img, status: 'pendente', em: Date.now() }); S.pedPlano = null; pedidosLidos = ''; carregarMeusPedidos(); render(); toast('Comprovante enviado! Avisamos quando o plano for liberado.'); } catch (e) { erro(e); }
+  },
+  cliente: (fd, f) => {
+    const email = f.dataset.id, c = (S.clientes || []).find(x => x.email === email); if (!c) return;
+    const val = fd.get('validade') ? new Date(fd.get('validade') + 'T23:59').getTime() : c.validade;
+    const novo = { ...c, plano: fd.get('plano'), torneiosMax: num(fd.get('torneiosMax'), c.torneiosMax, 0), categoriasMax: num(fd.get('categoriasMax'), c.categoriasMax, 1), duplasMax: num(fd.get('duplasMax'), c.duplasMax, 2), validade: val }; delete novo.email;
+    S.editCli = null;
+    lote([['clientes/' + email, novo], ...S.torneios.filter(x => x.d.dono === email).map(x => [`torneios/${x.id}`, { ...x.d, limites: { categorias: novo.categoriasMax, duplas: novo.duplasMax } }])]).then(() => toast('Cliente atualizado.'));
   },
   fotos: async (fd, f) => {
     const arqs = fd.getAll('arq').filter(x => x && x.size), btn = f.querySelector('#ft-env'); if (!arqs.length) return;
@@ -1697,7 +1855,7 @@ document.addEventListener('submit', e => { e.preventDefault(); const f = e.targe
 function init() {
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => { });
   const h = location.hash.slice(1);
-  if (['mesario', 'inscricao', 'jogos', 'classificacao', 'chave', 'marca', 'config', 'ranking', 'fotos', 'agenda'].includes(h)) S.tab = h;
+  if (['mesario', 'inscricao', 'jogos', 'classificacao', 'chave', 'marca', 'config', 'ranking', 'fotos', 'agenda', 'conta', 'admin'].includes(h)) S.tab = h;
   if (!configurado) { S.boot = 'ok'; render(); return; }
   render();
   let primeiraVez = true;
