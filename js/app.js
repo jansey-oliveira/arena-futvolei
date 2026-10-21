@@ -440,7 +440,7 @@ function aposLogin() {
   const m = meusTorneios();
   if (m.length && S.tid === params.get('t')) { if (avisar) toast('Você não organiza este torneio. Os seus estão no seletor do topo.'); }
   else if (m.length) { trocarTorneio(m[0].id); render(); if (avisar) toast(m.length > 1 ? `Você organiza ${m.length} torneios. Troque no seletor do topo.` : 'Você é organizador deste torneio.'); }
-  else if (avisar) toast('Este e-mail não organiza nenhum torneio. Peça para um organizador adicionar você na aba Torneio.');
+  else if (avisar) toast('Este e-mail ainda não organiza nenhum torneio. Para criar o seu, abra Minha conta, no topo.');
 }
 const meusTorneios = () => S.torneios.filter(x => S.orgDe[x.id]);
 async function addOrg(email, nome) {
