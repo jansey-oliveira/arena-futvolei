@@ -80,6 +80,30 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Mensal de grupos (site mensal-100compromisso): mensalidades, presença, avulsos, caixa e uniforme.
+    // Qualquer pessoa vê; só administradores e organizadores do grupo alteram.
+    match /grupos/{gid} {
+      function isOrgGrupo() {
+        return isAdmin()
+          || (emailOk() && exists(/databases/$(database)/documents/grupos/$(gid)/organizadores/$(emailAtual())));
+      }
+      allow read: if true;
+      allow write: if isAdmin();
+
+      // Organizadores do grupo: cada um só confere o próprio cadastro; só administradores incluem.
+      match /organizadores/{email} {
+        allow read: if isAdmin() || (emailOk() && emailAtual() == email);
+        allow write: if isAdmin();
+      }
+      match /integrantes/{id} { allow read: if true; allow write: if isOrgGrupo(); }
+      match /pagamentos/{id} { allow read: if true; allow write: if isOrgGrupo(); }
+      match /despesas/{id} { allow read: if true; allow write: if isOrgGrupo(); }
+      match /avulsos/{id} { allow read: if true; allow write: if isOrgGrupo(); }
+      match /jogos/{id} { allow read: if true; allow write: if isOrgGrupo(); }
+      match /uniforme/{id} { allow read: if true; allow write: if isOrgGrupo(); }
+      match /config/{id} { allow read: if true; allow write: if isOrgGrupo(); }
+    }
+
     match /torneios/{tid} {
       allow read: if true;
       allow create: if isAdmin() || criaComoCliente();
